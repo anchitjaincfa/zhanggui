@@ -37,6 +37,20 @@ export default function Console() {
   const [running, setRunning] = useState<Scenario | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<GuardianRow | null>(null);
+  // Floor mode strips the demo scaffolding so the console reads as the product
+  // a restaurant would actually run, not a pitch. ?mode=floor or the F key.
+  const [floor, setFloor] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setFloor(new URLSearchParams(window.location.search).get("mode") === "floor");
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) return;
+      if (e.key === "f" || e.key === "F") setFloor((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const status = state.call?.status ?? "idle";
   const live = status === "active" || status === "ringing";
@@ -241,21 +255,23 @@ export default function Console() {
         />
         <ActionReceipt
           rows={state.receipt}
-          className="min-h-[150px] lg:col-span-3 lg:min-h-0"
+          className={`min-h-[150px] lg:min-h-0 ${floor ? "lg:col-span-6" : "lg:col-span-3"}`}
         />
-        <div className="lg:col-span-2">
+        <div className={floor ? "lg:col-span-2" : "lg:col-span-2"}>
           <CallButton />
         </div>
-        <Controls
-          onScenario={(s) => void runScenario(s)}
-          onReset={reset}
-          onSeed={() => void seed()}
-          busy={busy}
-          running={running}
-          note={note}
-          meta={state.scenarios}
-          className="min-h-[150px] lg:col-span-3 lg:min-h-0"
-        />
+        {!floor && (
+          <Controls
+            onScenario={(s) => void runScenario(s)}
+            onReset={reset}
+            onSeed={() => void seed()}
+            busy={busy}
+            running={running}
+            note={note}
+            meta={state.scenarios}
+            className="min-h-[150px] lg:col-span-3 lg:min-h-0"
+          />
+        )}
       </div>
 
       <GuardianOverlay row={overlay} onClose={() => setOverlay(null)} />
