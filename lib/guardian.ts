@@ -24,18 +24,22 @@ export const ALLERGENS: Allergen[] = [
 
 /** How an allergen may appear in free text. */
 const SYNONYMS: Record<Allergen, string[]> = {
-  peanut: ["peanut", "peanuts", "groundnut", "花生"],
-  shellfish: ["shellfish", "crustacean", "crab", "lobster", "scallop", "貝"],
-  shrimp: ["shrimp", "prawn", "prawns", "dried shrimp", "虾", "蝦"],
-  fish_sauce: ["fish sauce", "鱼露"],
+  peanut: ["peanut", "groundnut", "花生"],
+  shellfish: ["shellfish", "crustacean", "crab", "lobster", "scallop", "clam", "oyster", "貝", "海鲜", "海鮮"],
+  shrimp: ["shrimp", "prawn", "dried shrimp", "虾", "蝦"],
+  fish_sauce: ["fish sauce", "鱼露", "魚露"],
   shrimp_paste: ["shrimp paste", "dried shrimp paste", "虾酱", "蝦醬"],
-  gluten: ["gluten", "wheat", "flour", "面粉"],
-  dairy: ["dairy", "milk", "cream", "butter", "cheese", "mayonnaise"],
+  gluten: ["gluten", "wheat", "flour", "面粉", "麸质", "麵粉"],
+  dairy: ["dairy", "milk", "cream", "butter", "cheese", "mayonnaise", "lactose", "yogurt", "yoghurt", "ghee", "牛奶", "奶制品", "乳制品"],
   sesame: ["sesame", "tahini", "芝麻"],
-  tree_nut: ["tree nut", "tree nuts", "walnut", "walnuts", "cashew", "almond", "核桃"],
-  egg: ["egg", "eggs", "蛋"],
-  soy: ["soy", "soya", "soybean", "tofu", "大豆"],
+  tree_nut: ["tree nut", "walnut", "cashew", "almond", "pecan", "pistachio", "hazelnut", "macadamia", "核桃", "腰果", "杏仁"],
+  egg: ["egg", "鸡蛋", "蛋"],
+  soy: ["soy", "soya", "soybean", "tofu", "大豆", "豆腐"],
 };
+
+/** "I have a nut allergy" names no specific nut. A gate cannot guess which one
+ *  they meant, so it must assume both families. */
+const GENERIC_NUT = /(?:^|[^a-z])nuts?(?:[^a-z]|$)|坚果|堅果/i;
 
 /** Families: being allergic to shellfish implies caring about shrimp etc. */
 const IMPLIES: Partial<Record<Allergen, Allergen[]>> = {
@@ -46,12 +50,31 @@ const IMPLIES: Partial<Record<Allergen, Allergen[]>> = {
 
 // A bare "no" is not an allergy cue — "no cilantro" is a preference, and it
 // used to drag in whatever allergen happened to appear as a substring.
-const RESTRICTION_CUES =
-  /\ballerg|anaphyla|intoleran|\bavoid|cannot eat|can'?t eat|must not eat|\bfree from|sensitiv|\bno (?:peanut|shellfish|shrimp|gluten|dairy|sesame|soy|egg|nut|fish)/i;
+//
+// The first version only recognised the way a form asks the question. People do
+// not say "I cannot eat peanuts"; they say "I can't have peanuts", "it makes me
+// sick", "我对花生过敏". Every phrasing this missed was scored as *no
+// restrictions at all*, which is the one wrong answer a gate must never give —
+// so the cue list is deliberately generous. A false cue costs a question at the
+// counter; a missed cue costs an ambulance.
+const RESTRICTION_CUES = new RegExp(
+  [
+    "\\ballerg", "anaphyla", "epipen", "epi-pen", "intoleran", "coeliac", "celiac",
+    "\\bavoid", "\\bcut out\\b", "stay(?:s)? away from", "\\bkeep .{0,12}away from",
+    "(?:cannot|can'?t|can not|do(?:es)?n'?t|won'?t|must not|mustn'?t|shouldn'?t|should not)" +
+      "\\s+(?:eat|have|touch|take|do|handle|go near)",
+    "\\bfree from\\b", "\\bfree of\\b", "[a-z]-free\\b", "sensitiv", "reacts? (?:badly )?to",
+    "makes? (?:me|him|her|them) (?:sick|ill)", "\\bno\\b\\s+[a-z]{0,8}\\s*(?:allerg)",
+    "\\bno (?:peanut|shellfish|shrimp|prawn|gluten|wheat|dairy|milk|sesame|soy|egg|nut|fish|seafood)",
+    // Mandarin. 过敏 = allergic · 不能吃 = cannot eat · 忌 = must abstain from
+    "过敏", "過敏", "不能吃", "不可以吃", "不吃", "忌口", "\\u5fcc", "敏感", "受不了",
+  ].join("|"),
+  "i"
+);
 
 // "does not contain", "no peanut", "peanut-free", "separate wok"
 const NEGATION =
-  /\b(?:does not|doesn't|does nt|no|not|never|free of|free from|without)\b[^.]{0,40}|(?:peanut|shrimp|dairy|gluten|sesame|soy|egg)[- ]free|separate wok|no .{0,12}contact/i;
+  /\b(?:does not|doesn't|does nt|no|not|never|free of|free from|without)\b[^.]{0,40}|(?:peanut|shrimp|dairy|gluten|sesame|soy|egg)[- ]free|separate wok|no .{0,12}contact|不含|没有花生|沒有/i;
 
 const DATE_RE = /\b(20\d{2}-\d{2}-\d{2})\b/g;
 
@@ -155,15 +178,38 @@ const zhPhrase = (a: Allergen): string =>
 const label = (a: Allergen) => a.replace(/_/g, " ");
 
 /** Word-boundary match. Plain substring turned "Peggy" into an egg allergy
- *  and "Soyoung" into a soy allergy — both real, both reproducible. */
+ *  and "Soyoung" into a soy allergy — both real, both reproducible.
+ *
+ *  The boundary then over-corrected: "cashew" stopped matching "cashews",
+ *  because a trailing s is a letter. Plurals fold in here rather than by
+ *  listing every form, and curly apostrophes normalise so a phone transcript's
+ *  "can’t" reads the same as a typed "can't". */
+const norm = (s: string) => s.toLowerCase().replace(/[‘’ʼ]/g, "'");
+
 const mentions = (text: string, a: Allergen) => {
-  const t = text.toLowerCase();
+  const t = norm(text);
   return SYNONYMS[a].some((syn) => {
-    const s = syn.toLowerCase();
+    const s = norm(syn);
     if (/[\u4e00-\u9fff]/.test(s)) return t.includes(s); // CJK has no word breaks
-    return new RegExp(`(?:^|[^a-z])${s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z]|$)`, "i").test(t);
+    const esc = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:^|[^a-z])${esc}(?:e?s)?(?:[^a-z]|$)`, "i").test(t);
   });
 };
+
+/**
+ * Is the allergen NEGATED, in the clause where it is actually mentioned?
+ *
+ * A whole-row negation test is too blunt in the direction that matters. Split
+ * on clause boundaries, keep only the clauses naming this allergen, and clear
+ * the hazard only if every one of them negates it. One unqualified "contains
+ * peanut" outvotes any amount of reassuring prose around it.
+ */
+function isNegatedFor(text: string, a: Allergen): boolean {
+  const clauses = text.split(/[.;:!?]|,(?=\s*(?:but|however|though)\b)|\bbut\b|\bhowever\b|[。；！？]/i);
+  const naming = clauses.filter((c) => c.trim() && mentions(c, a));
+  if (!naming.length) return NEGATION.test(text); // fall back to the old behaviour
+  return naming.every((c) => NEGATION.test(c));
+}
 
 /** Does this text refer to the dish at all? sku, English name, or Chinese name. */
 function refersToDish(text: string, item: MenuItem): boolean {
@@ -180,12 +226,20 @@ function refersToDish(text: string, item: MenuItem): boolean {
 export function extractRestrictions(rows: { text: string }[]): Allergen[] {
   const found = new Set<Allergen>();
   for (const r of rows) {
-    if (!RESTRICTION_CUES.test(r.text)) continue;
+    const text = norm(r.text);
+    if (!RESTRICTION_CUES.test(text)) continue;
     for (const a of ALLERGENS) {
-      if (mentions(r.text, a)) {
+      if (mentions(text, a)) {
         found.add(a);
         for (const implied of IMPLIES[a] ?? []) found.add(implied);
       }
+    }
+    // "a nut allergy" without naming the nut. Peanuts are a legume and tree
+    // nuts are not, but nobody saying this sentence means that distinction —
+    // and the gate does not get to pick the more convenient reading.
+    if (GENERIC_NUT.test(text) && !found.has("tree_nut")) {
+      found.add("tree_nut");
+      found.add("peanut");
     }
   }
   return [...found];
@@ -226,19 +280,29 @@ export async function guardianCheck(args: {
   searches.push({ scope: "guest personal", query: guestQ, rows: guestRes.data.length });
   searches.push({ scope: "restaurant allergen group", query: kitchenQ, rows: kitchenRes.data.length });
 
-  // If we could not read the guest's ledger, we do not get to say "allow".
-  const lookupFailed = Boolean(guestRes.failed) || Boolean(kitchenRes.failed);
+  // If we could not read a ledger, we do not get to say "allow".
+  //
+  // These two failures are not interchangeable. A hint carried in from the call
+  // ("she just told us she's allergic to peanuts") substitutes for the GUEST
+  // ledger, so a guest-side failure is survivable. It says nothing about what
+  // is in the food, so a KITCHEN-side failure is not — and the old single flag
+  // let a non-empty hint wave both of them through.
   const restricted = args.restrictionsHint?.length
-    ? args.restrictionsHint
+    ? [...new Set([...args.restrictionsHint, ...extractRestrictions(guestRes.data)])]
     : extractRestrictions(guestRes.data);
 
-  if (lookupFailed && !args.restrictionsHint?.length) {
+  const guestUnreadable = Boolean(guestRes.failed) && !args.restrictionsHint?.length;
+  const kitchenUnreadable = Boolean(kitchenRes.failed);
+
+  if (guestUnreadable || kitchenUnreadable) {
     return {
       verdict: "unconfirmed", sku: item.sku, nameEn: item.name_en, nameZh: item.name_zh,
       restricted, hazards: [], searches,
-      say:
-        `I can't reach the guest's record right now, so I'm not going to tell you the ` +
-        `${item.name_en} is safe. Ask at the counter before you order it.`,
+      say: guestUnreadable
+        ? `I can't reach the guest's record right now, so I'm not going to tell you the ` +
+          `${item.name_en} is safe. Ask at the counter before you order it.`
+        : `I can't reach the kitchen's allergen record right now, so I can't tell you what's ` +
+          `in the ${item.name_en}. Ask at the counter before you order it.`,
     };
   }
 
@@ -262,9 +326,12 @@ export async function guardianCheck(args: {
     const rows = kitchenRes.data.filter(
       (m) => refersToDish(m.text, item) && mentions(m.text, a)
     );
-    // H2: split incriminating from exculpatory.
-    const positive = rows.filter((m) => !NEGATION.test(m.text));
-    const negative = rows.filter((m) => NEGATION.test(m.text));
+    // H2: split incriminating from exculpatory — but scope the negation to the
+    // clause that actually names the allergen. Testing the whole row let a
+    // stray "not" anywhere in the sentence clear a hazard, so
+    // "this dish is not safe: contains peanut" read as exculpatory.
+    const positive = rows.filter((m) => !isNegatedFor(m.text, a));
+    const negative = rows.filter((m) => isNegatedFor(m.text, a));
 
     if (declared || positive.length) {
       const evidence = [...new Set(

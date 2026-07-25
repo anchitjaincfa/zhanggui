@@ -43,13 +43,22 @@ export interface SearchResult {
 
 interface Res<T> { ok: boolean; status: number; body: T }
 
+// A non-200 was already handled. A *thrown* fetch — DNS failure, TLS error,
+// socket timeout — was not: it propagated up through guardianCheck and landed
+// in the route's catch-all, which answers "take the order normally". That is a
+// safety gate failing open on a bad network. Transport errors become status 0.
 async function api<T = unknown>(path: string, init?: RequestInit): Promise<Res<T>> {
-  const res = await fetch(BASE + path, {
-    ...init,
-    headers: { "x-api-key": KEY, "content-type": "application/json", ...(init?.headers || {}) },
-    cache: "no-store",
-  });
-  const text = await res.text();
+  let res: Response;
+  try {
+    res = await fetch(BASE + path, {
+      ...init,
+      headers: { "x-api-key": KEY, "content-type": "application/json", ...(init?.headers || {}) },
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, status: 0, body: undefined as T };
+  }
+  const text = await res.text().catch(() => "");
   let body: unknown;
   try { body = JSON.parse(text); } catch { body = text; }
   return { ok: res.ok, status: res.status, body: body as T };

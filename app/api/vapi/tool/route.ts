@@ -9,9 +9,13 @@
 // non-200 responses and the caller just hears nothing.
 
 import { NextResponse } from "next/server";
-import { createCall, findCallByVapiId } from "@/lib/store";
+import { createCall, findCallByVapiId, updateCall } from "@/lib/store";
 import { doGuardian, doIdentify, doSecretMenu, doAdd, doFinalize, type RunContext } from "@/lib/engine";
-import { MENU, RESTAURANT, bySku } from "@/data/restaurant";
+import { MENU, RESTAURANT } from "@/data/restaurant";
+import { resolveItem, didYouMean } from "@/lib/resolve";
+import {
+  identifyByPhone, identifyByBirthday, linkPhoneToProfile, describe, greeting, sayBirthday,
+} from "@/lib/identity";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -41,23 +45,102 @@ export async function POST(req: Request) {
         ? null
         : `+${digits}`;
 
-    const vapiCallId = String(
-      (inner.callId as string) ??
-      ((inner.call as Record<string, unknown>)?.id as string) ??
-      "web"
-    );
+    // Vapi puts the call id in different places depending on which tool shape
+    // fired, and the old code collapsed every miss to the literal "web" — so two
+    // callers whose bodies lacked an id shared one row, and the second caller
+    // inherited the first one's identity, order and Guardian history. Fall back
+    // to a per-number key instead of a global one: still stable across the turns
+    // of a single call, but never shared between two different phones.
+    const asId = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const call = (inner.call ?? body.call) as Record<string, unknown> | undefined;
+    const vapiCallId =
+      asId(inner.callId) ??
+      asId(call?.id) ??
+      asId(args.callId) ??
+      (digits ? `web_${digits}` : "web");
     const existing = await findCallByVapiId(vapiCallId);
     const callId = existing?.id ?? (await createCall({ vapiCallId, phone, channel: "phone" }));
     const ctx: RunContext = { callId, phone: phone ?? existing?.caller_phone ?? null };
 
     switch (action) {
+      // Caller ID first. It asks the guest for nothing, so it is always worth
+      // trying before the desk starts interrogating anyone.
       case "identify": {
+        const local = identifyByPhone(ctx.phone);
+        if (local) {
+          await updateCall(callId, { guest_name: local.name, language: local.language, caller_phone: ctx.phone });
+          void doIdentify(ctx); // fills the Ghost CRM panel from memory, in the background
+          return say(
+            `KNOWN CALLER — do not ask for a birthday. ${greeting(local)} ` +
+            `Details for your own use: ${describe(local)}. ` +
+            (local.notes.slice(0, 3).join(" ") || ""),
+            { known: true, name: local.name, restrictions: local.restrictions }
+          );
+        }
         const card = await doIdentify(ctx);
-        if (!card) return say("New caller — nothing on this number yet. Take the order normally.");
+        if (card) {
+          return say(
+            `Known guest: ${card.name ?? card.nameZh}. ` +
+            `Must avoid: ${card.restrictions.join(", ") || "nothing recorded"}. ` +
+            card.notes.slice(0, 3).join(" "),
+            { known: true }
+          );
+        }
         return say(
-          `Known guest: ${card.name ?? card.nameZh}. ` +
-          `Must avoid: ${card.restrictions.join(", ") || "nothing recorded"}. ` +
-          card.notes.slice(0, 3).join(" ")
+          "UNKNOWN NUMBER. Ask: 'Have you ordered with us before?' If they say yes, ask for " +
+          "their date of birth and call this tool again with action=birthday and the date in " +
+          "the `query` field. If they say no, take the order normally and do not ask again.",
+          { known: false }
+        );
+      }
+
+      // The second attempt. A birthday is a disambiguator, not a password —
+      // when it lands on more than one person the desk asks for a name rather
+      // than guessing, because guessing hands a stranger someone's allergies.
+      case "birthday":
+      case "dob": {
+        const spoken = query || String(args.birthday ?? args.dob ?? args.date ?? "");
+        const nameHint = args.name ? String(args.name) : undefined;
+        const out = identifyByBirthday(spoken, nameHint);
+
+        if (out.status === "unparsed") {
+          return say(
+            "I didn't catch that date. Ask them to say it as day, month and year — " +
+            "for example, the tenth of January nineteen ninety-four.",
+            { matched: false }
+          );
+        }
+        if (out.status === "nomatch") {
+          return say(
+            "No record matches that date of birth. Say: 'I can't find you under that date — " +
+            "I'll start a fresh record.' Then take the order normally and stop asking.",
+            { matched: false }
+          );
+        }
+        if (out.status === "ambiguous") {
+          return say(
+            `That date matches ${out.candidates.length} people. Ask for their first name, then ` +
+            `call this tool again with action=birthday, the same date in \`query\`, and the name ` +
+            `in \`name\`. Do NOT read out any of their details until you know which one it is.`,
+            { matched: false, ambiguous: out.candidates.length }
+          );
+        }
+
+        const p = out.profile;
+        if (ctx.phone) linkPhoneToProfile(p, ctx.phone);
+        await updateCall(callId, { guest_name: p.name, language: p.language, caller_phone: ctx.phone });
+        ctx.guest = {
+          phone: ctx.phone ?? p.phone, name: p.name, nameZh: p.name_zh, language: p.language,
+          restrictions: p.restrictions as never[], dislikes: [], spice: String(p.spice),
+          fulfilment: p.fulfilment, cadence: p.cadence, notes: p.notes,
+          orderCount: p.visits, knownSince: p.since, raw: [],
+        };
+        void doIdentify(ctx);
+        return say(
+          `MATCHED — this is ${p.name}, born ${sayBirthday(p.birthday)}. ${greeting(p)} ` +
+          `${ctx.phone ? `I've linked ${ctx.phone} to them, so we won't ask again. ` : ""}` +
+          `Details for your own use: ${describe(p)}. ${p.notes.slice(0, 3).join(" ")}`,
+          { matched: true, name: p.name, restrictions: p.restrictions }
         );
       }
 
@@ -71,27 +154,84 @@ export async function POST(req: Request) {
         );
       }
 
-      case "menu": {
-        const q = query.toLowerCase();
-        const hits = MENU.filter(
-          (m) => m.available &&
-            (m.name_en.toLowerCase().includes(q) || m.name_zh.includes(query) || m.sku.includes(q))
-        ).slice(0, 6);
+      // "What do you have?" is a real question and used to get a bad answer:
+      // a substring filter that returned nothing whenever the caller phrased it
+      // like a person. An empty menu response is what makes the assistant tell
+      // people a dish doesn't exist.
+      case "menu":
+      case "browse": {
+        const q = query.trim();
+        const listing = (items: typeof MENU) =>
+          items.map((m) => `${m.sku}: ${m.name_en} (${m.name_zh}) $${(m.price_cents / 100).toFixed(2)}`).join("; ");
+
+        if (!q || /^(menu|everything|all|what.*(have|got|serve|recommend))/i.test(q)) {
+          const listed = MENU.filter((m) => m.available && m.english_listed);
+          return say(`Full menu — ${listing(listed)}`);
+        }
+        // A category or a craving before a dish name: "noodles", "vegetarian",
+        // "something not spicy", "chicken".
+        const nq = q.toLowerCase();
+        const byCategory = MENU.filter(
+          (m) => m.available && (m.category.toLowerCase().includes(nq) || nq.includes(m.category.toLowerCase()))
+        );
+        if (byCategory.length) return say(`${byCategory[0].category} — ${listing(byCategory)}`);
+
+        if (/mild|not spicy|no spice|no heat|less spicy|不辣/i.test(q)) {
+          const mild = MENU.filter((m) => m.available && m.base_spice <= 1);
+          return say(`Mild options — ${listing(mild)}`);
+        }
+        if (/spicy|hot|numbing|mala|辣/i.test(q)) {
+          const hot = MENU.filter((m) => m.available && m.base_spice >= 4);
+          return say(`The hot end — ${listing(hot)}`);
+        }
+
+        const r = resolveItem(q, MENU);
+        if (r.item && r.confidence !== "fuzzy") {
+          const m = r.item;
+          return say(`${m.sku}: ${m.name_en} (${m.name_zh}) $${(m.price_cents / 100).toFixed(2)} — ${m.blurb}`);
+        }
+        const near = r.suggestions.length ? r.suggestions : MENU.filter((m) => m.available).slice(0, 4);
         return say(
-          hits.length
-            ? hits.map((m) => `${m.sku}: ${m.name_en} (${m.name_zh}) $${(m.price_cents / 100).toFixed(2)}`).join("; ")
-            : "No match on the menu. Ask them to describe it differently."
+          `No exact match for "${q}". Offer these instead, by name: ${listing(near)}. ` +
+          `Do NOT tell the caller we have nothing — ask which of these they meant.`
         );
       }
 
       // The gate. The model is told plainly not to add the item on a refusal.
       case "add":
       case "add_item": {
-        const item = bySku(sku);
-        if (!item) return say(`There's no item called ${sku}. Check the menu first.`);
-        const v = await doGuardian(ctx, sku);
+        // The model sends whatever the caller said — "Kung Pao Chicken", "the
+        // kung pao", "宫保鸡丁" — not our sku. Exact-match lookup here was the
+        // reason a working system told callers their dish wasn't on the menu.
+        const spoken = sku || query || String(args.item ?? args.dish ?? args.name ?? "");
+        const r = resolveItem(spoken, MENU);
+
+        if (!r.item) {
+          return say(
+            `I can't place "${spoken}". Ask which of these they meant: ${didYouMean(r)}. ` +
+            `Do NOT say the restaurant doesn't serve it.`
+          );
+        }
+        if (r.confidence === "fuzzy") {
+          return say(
+            `Not sure whether "${spoken}" means the ${r.item.name_en}. Ask the caller to confirm: ` +
+            `"Did you mean the ${r.item.name_en}?" — or offer ${didYouMean(r)}. Do not add anything yet.`,
+            { needsConfirmation: true }
+          );
+        }
+        const item = r.item;
+        if (!item.available) {
+          const alt = MENU.filter((m) => m.available && m.category === item.category).slice(0, 2);
+          return say(
+            `The ${item.name_en} is 86'd tonight. Say so plainly and offer: ` +
+            `${alt.map((m) => m.name_en).join(" or ") || "anything else on the menu"}.`
+          );
+        }
+        const v = await doGuardian(ctx, item.sku);
         if (v.verdict === "allow") {
-          await doAdd(ctx, sku, qty);
+          // item.sku, not the caller's words — doAdd looks the item up again and
+          // fails silently on a miss, which would drop the line from the ticket.
+          await doAdd(ctx, item.sku, qty);
           return say(`Added ${qty}× ${item.name_en}. Anything else?`, { verdict: v.verdict });
         }
         return say(`DO NOT ADD THIS ITEM. Say this to the caller, in their language: ${v.say}`, {
@@ -109,15 +249,44 @@ export async function POST(req: Request) {
       case "escalate":
         return say("Tell the caller a member of staff will pick up, then stop talking.");
 
-      default:
+      // An unrecognised action used to be a dead end, which the model reads as
+      // "this restaurant can't do that". Try to answer anyway.
+      default: {
+        if (query || sku) {
+          const r = resolveItem(query || sku, MENU);
+          if (r.item && r.confidence !== "fuzzy") {
+            const m = r.item;
+            return say(`${m.name_en} (${m.name_zh}) $${(m.price_cents / 100).toFixed(2)} — ${m.blurb}`);
+          }
+        }
         return say(
-          `Unknown action "${action}". Valid actions: identify, specials, menu, add, finalize, escalate.`
+          `Unknown action "${action}". Valid actions: identify, birthday, specials, menu, add, ` +
+          `finalize, escalate. Keep talking to the caller normally; do not mention this error.`
         );
+      }
     }
   } catch (err) {
+    // A blanket "take the order normally" is the right answer for a menu lookup
+    // and exactly the wrong one for the gate: an exception thrown anywhere
+    // inside an `add` would wave the item through unchecked. Refuse instead.
+    const failedAction = String(
+      ((body.message ?? body) as Record<string, unknown>)?.action ??
+      (((body.message ?? body) as Record<string, unknown>)?.arguments as Record<string, unknown>)?.action ??
+      ""
+    ).toLowerCase().trim();
+    const softError = err instanceof Error ? err.message : String(err);
+
+    if (failedAction === "add" || failedAction === "add_item") {
+      return say(
+        "DO NOT ADD THIS ITEM. Say this to the caller, in their language: I can't check that one " +
+        "against your record right now, so I'm not going to tell you it's safe. Please ask at the " +
+        "counter before you order it.",
+        { verdict: "unconfirmed", blocked: true, softError }
+      );
+    }
     return say(
       "Something went wrong looking that up. Take the order normally and mention you'll confirm at the counter.",
-      { softError: err instanceof Error ? err.message : String(err) }
+      { softError }
     );
   }
 }
