@@ -13,7 +13,7 @@
 //   H2 — a "does NOT contain" confirmation read as a hazard. Negations are
 //        parsed explicitly and treated as exculpatory, not incriminating.
 
-import { search, ALLERGEN_GROUP } from "./xtrace";
+import { search, ALLERGEN_GROUP, type SearchResult } from "./xtrace";
 import { bySku, MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
 
 export const ALLERGENS: Allergen[] = [
@@ -211,10 +211,10 @@ export async function guardianCheck(args: {
   const [guestRes, kitchenRes] = await Promise.all([
     args.guestPhone
       ? search({ query: guestQ, user_id: args.guestPhone, mode: "retrieve" })
-      : Promise.resolve({ data: [] }),
+      : Promise.resolve<SearchResult>({ data: [] }),
     ALLERGEN_GROUP
       ? search({ query: kitchenQ, group_ids: [ALLERGEN_GROUP], mode: "retrieve" })
-      : Promise.resolve({ data: [] }),
+      : Promise.resolve<SearchResult>({ data: [] }),
   ]);
   searches.push({ scope: "guest personal", query: guestQ, rows: guestRes.data.length });
   searches.push({ scope: "restaurant allergen group", query: kitchenQ, rows: kitchenRes.data.length });

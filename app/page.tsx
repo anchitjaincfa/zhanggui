@@ -125,6 +125,16 @@ export default function Console() {
     if (!firstSighting && last.verdict !== "allow") setOverlay(last);
   }, [state.guardian]);
 
+  // The beat pump. Scenarios advance on a timer so the demo runs itself;
+  // space pauses it, N nudges it forward by hand.
+  useEffect(() => {
+    if (!autoplay) return;
+    const t = setInterval(() => {
+      if (activeCall.current) void step();
+    }, 2600);
+    return () => clearInterval(t);
+  }, [autoplay, step]);
+
   /* ── controls ────────────────────────────────────────────────────── */
   const runScenario = useCallback(async (s: Scenario) => {
     setBusy(true);
