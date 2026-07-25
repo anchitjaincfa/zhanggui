@@ -38,6 +38,17 @@ export async function POST(req: Request) {
 
       const cursor = Number((call.summary ?? "").split(":")[1] ?? "0");
       const next = cursor + 1;
+      // A presenter double-tapping Next must not run the same beat twice.
+      // Claim the slot before doing any work; a loser sees its own write fail.
+      const { data: claimed } = await (await import("@/lib/store")).db()
+        .from("calls")
+        .update({ summary: `${scenarioId}:${next}` })
+        .eq("id", call.id)
+        .eq("summary", `${scenarioId}:${cursor}`)
+        .select("id");
+      if (!claimed || claimed.length === 0) {
+        return NextResponse.json({ ok: true, callId: call.id, beat: cursor, skipped: "double-tap" });
+      }
       if (next >= scenario.beats.length) {
         const evs = await eventsFor(call.id);
         const transcript = evs
@@ -52,7 +63,6 @@ export async function POST(req: Request) {
       }
 
       await runBeat(scenarioId, next, call.id, call.caller_phone);
-      await updateCall(call.id, { summary: `${scenarioId}:${next}` });
       return NextResponse.json({
         ok: true, callId: call.id, beat: next,
         remaining: scenario.beats.length - next - 1,

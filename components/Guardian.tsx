@@ -102,9 +102,26 @@ export function GuardianPanel({
           )}
         </>
       }
-      bodyClassName="zg-scroll overflow-y-auto"
+      bodyClassName="flex flex-col"
     >
-      {!latest || !look ? <GuardianStandby /> : <Verdict_ row={latest} size="panel" onOpen={onOpen} />}
+      {!latest || !look ? (
+        <GuardianStandby />
+      ) : (
+        <>
+          <div className="zg-scroll min-h-0 flex-1 overflow-y-auto">
+            <Verdict_ row={latest} size="panel" onOpen={onOpen} showPhrase={false} />
+          </div>
+          {/* the phrase is P0 — it never scrolls out of sight */}
+          <div className="shrink-0 px-3.5 pb-3">
+            <PhraseBox
+              row={latest}
+              stage={false}
+              lookText={look.text}
+              lookBorder={look.border}
+            />
+          </div>
+        </>
+      )}
     </Panel>
   );
 }
@@ -191,10 +208,12 @@ function Verdict_({
   row,
   size,
   onOpen,
+  showPhrase = true,
 }: {
   row: GuardianRow;
   size: "panel" | "stage";
   onOpen: () => void;
+  showPhrase?: boolean;
 }) {
   const look = LOOK[row.verdict];
   const stage = size === "stage";
@@ -232,7 +251,7 @@ function Verdict_({
       >
         {row.nameZh ? (
           <span
-            className={`zh-hero text-ink ${stage ? "text-[64px]" : "text-[30px]"}`}
+            className={`zh-hero text-ink ${stage ? "text-[64px]" : "text-[28px]"}`}
           >
             {row.nameZh}
           </span>
@@ -269,7 +288,7 @@ function Verdict_({
           className={`border-l-2 text-ink ${look.border} ${
             stage
               ? "mt-5 pl-4 text-[21px] leading-[1.45]"
-              : "mt-2 line-clamp-3 pl-2.5 text-[13px] leading-snug"
+              : "mt-2 line-clamp-2 pl-2.5 text-[13px] leading-snug"
           }`}
         >
           {row.say}
@@ -279,9 +298,11 @@ function Verdict_({
       {/* evidence */}
       {row.hazards.length > 0 ? (
         <div className={stage ? "mt-6 space-y-3" : "mt-2 space-y-1.5"}>
-          <div className="mono text-[9.5px] font-bold tracking-[0.24em] text-dim uppercase">
-            evidence · 憑據
-          </div>
+          {stage ? (
+            <div className="mono text-[9.5px] font-bold tracking-[0.24em] text-dim uppercase">
+              evidence · 憑據
+            </div>
+          ) : null}
           {row.hazards.map((h, i) => (
             <div
               key={`${h.allergen}-${i}`}
@@ -327,7 +348,14 @@ function Verdict_({
       ) : null}
 
       {/* the phrase to say at the counter */}
-      <PhraseBox row={row} stage={stage} lookText={look.text} lookBorder={look.border} />
+      {showPhrase ? (
+        <PhraseBox
+          row={row}
+          stage={stage}
+          lookText={look.text}
+          lookBorder={look.border}
+        />
+      ) : null}
     </div>
   );
 }

@@ -33,7 +33,7 @@ export function OrderPanel({
           ) : null}
         </>
       }
-      bodyClassName="zg-scroll flex flex-col overflow-y-auto"
+      bodyClassName="flex min-h-0 flex-col"
     >
       {lines.length === 0 ? (
         <Empty
@@ -43,11 +43,11 @@ export function OrderPanel({
         />
       ) : (
         <>
-          <ul className="flex-1 divide-y divide-line">
+          <ul className="zg-scroll min-h-0 flex-1 divide-y divide-line overflow-y-auto">
             {lines.map((l, i) => (
               <li
                 key={`${l.sku}-${i}`}
-                className={`zg-rise flex items-baseline gap-2.5 px-3 py-2 ${
+                className={`zg-rise flex items-baseline gap-2.5 px-3 py-1.5 ${
                   l.blocked ? "bg-vermilion/[0.07]" : ""
                 }`}
               >

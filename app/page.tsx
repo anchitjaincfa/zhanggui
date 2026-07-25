@@ -212,9 +212,9 @@ export default function Console() {
                   : null,
               )
             }
-            className="min-h-[260px] lg:min-h-0 lg:flex-[3]"
+            className="min-h-[260px] lg:min-h-0 lg:flex-[7]"
           />
-          <div className="grid min-h-0 grid-cols-1 gap-2.5 sm:grid-cols-2 lg:flex-[2]">
+          <div className="grid min-h-0 grid-cols-1 gap-2.5 sm:grid-cols-2 lg:flex-[4]">
             <OrderPanel order={state.order} className="min-h-[170px] lg:min-h-0" />
             <KdsPanel kds={state.kds} className="min-h-[170px] lg:min-h-0" />
           </div>
@@ -223,7 +223,7 @@ export default function Console() {
         <div className="flex min-h-0 flex-col gap-2.5 lg:col-span-4">
           <GuestCard
             guest={state.guestCard}
-            className="shrink-0 lg:max-h-[46%]"
+            className="shrink-0 lg:max-h-[50%]"
           />
           <GhostCrm
             memory={state.memory}

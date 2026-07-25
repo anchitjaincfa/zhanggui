@@ -65,11 +65,21 @@ export async function POST(req: Request) {
   let payload: Record<string, unknown> = {};
   try { payload = (await req.json()) as Record<string, unknown>; } catch { /* fall through */ }
 
-  const message = (payload.message ?? payload) as Record<string, unknown>;
-  const type = String(message.type ?? "");
-  const call = message.call as Record<string, unknown> | undefined;
-  const vapiCallId = String(call?.id ?? message.callId ?? "unknown");
-  const phone = callerNumber(call);
+  // Everything below must be inside the guard: Vapi drops any non-200 response
+  // and the caller simply hears silence, which is indistinguishable from a bug.
+  let message: Record<string, unknown> = {};
+  let type = "";
+  let vapiCallId = "unknown";
+  let phone: string | null = null;
+  try {
+    message = (payload.message ?? payload) as Record<string, unknown>;
+    type = String(message.type ?? "");
+    const c = message.call as Record<string, unknown> | undefined;
+    vapiCallId = String(c?.id ?? message.callId ?? "unknown");
+    phone = callerNumber(c);
+  } catch {
+    return NextResponse.json({ ok: false, softError: "unparseable payload" });
+  }
 
   try {
     switch (type) {
