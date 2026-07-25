@@ -1,6 +1,6 @@
 "use client";
 
-import type { Scenario } from "./types";
+import type { Scenario, ScenarioMeta } from "./types";
 import { Panel } from "./Ui";
 
 const SCENARIOS: Array<{
@@ -44,6 +44,7 @@ export function Controls({
   busy,
   running,
   note,
+  meta = [],
   className = "",
 }: {
   onScenario: (s: Scenario) => void;
@@ -52,8 +53,10 @@ export function Controls({
   busy: boolean;
   running: Scenario | null;
   note: string | null;
+  meta?: ScenarioMeta[];
   className?: string;
 }) {
+  const byId = new Map(meta.map((m) => [m.id, m]));
   return (
     <Panel
       label="Demo control"
@@ -75,6 +78,7 @@ export function Controls({
                 key={s.id}
                 type="button"
                 disabled={busy}
+                title={byId.get(s.id)?.blurb ?? s.beat}
                 onClick={() => onScenario(s.id)}
                 className={`group relative flex cursor-pointer flex-col items-center justify-center gap-0.5 overflow-hidden rounded-[8px] border border-line bg-black/30 px-1.5 py-2 text-center transition-colors disabled:cursor-wait disabled:opacity-55 ${s.tone} ${
                   active ? "border-jade/70 bg-jade/[0.09]" : ""

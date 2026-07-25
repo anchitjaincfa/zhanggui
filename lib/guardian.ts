@@ -179,10 +179,12 @@ export async function guardianCheck(args: {
     const negative = rows.filter((m) => NEGATION.test(m.text));
 
     if (declared || positive.length) {
-      const evidence = positive.length
-        ? positive.map((m) => m.text)
-        : [`${item.name_en} is prepared with ${label(a)} at this restaurant.` +
-           (item.hidden_allergen_note ? ` Note: ${item.hidden_allergen_note}.` : "")];
+      const evidence = [...new Set(
+        positive.length
+          ? positive.map((m) => m.text)
+          : [`${item.name_en} is prepared with ${label(a)} at this restaurant.` +
+             (item.hidden_allergen_note ? ` Note: ${item.hidden_allergen_note}.` : "")]
+      )];
       const dates = positive.flatMap((m) => m.text.match(DATE_RE) ?? []).sort();
       const last = dates.at(-1) ?? null;
       hazards.push({
@@ -198,7 +200,7 @@ export async function guardianCheck(args: {
 
     // Cleared by a dated negative confirmation — but only if it is fresh.
     if (negative.length) {
-      const dates = negative.flatMap((m) => m.text.match(DATE_RE) ?? []).sort();
+      const dates = [...new Set(negative.flatMap((m) => m.text.match(DATE_RE) ?? []))].sort();
       const last = dates.at(-1) ?? null;
       if (last && daysSince(last) <= STALE_DAYS) continue; // genuinely allow
       unconfirmed.push(a);
@@ -213,13 +215,14 @@ export async function guardianCheck(args: {
     const h = hazards[0];
     const safe = safeAlternative(item, restricted);
     const when = h.lastConfirmed ? ` on ${h.lastConfirmed}` : "";
+    const dated = h.lastConfirmed ? "confirmed" : "has on record";
     const times = h.confirmations > 1 ? `, and it's been confirmed ${h.confirmations} times` : "";
     const alt = safe ? ` The ${safe.name_en} is clear — that's what I'd send you.` : "";
     return {
       verdict: "block", sku: item.sku, nameEn: item.name_en, nameZh: item.name_zh,
       restricted, hazards, searches,
       say:
-        `I'd skip the ${item.name_en}. This kitchen confirmed${when} that it carries ${label(h.allergen)}${times}.` +
+        `I'd skip the ${item.name_en}. This kitchen ${dated}${when} that it carries ${label(h.allergen)}${times}.` +
         alt +
         ` If you want to check at the counter, say: ${h.phrase}`,
     };

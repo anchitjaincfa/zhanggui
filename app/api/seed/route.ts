@@ -84,7 +84,7 @@ export async function POST() {
   // ── Allergen confirmations → operator scope + allergen group.
   //    Each carries a date and a source. That date is what Guardian cites.
   counts.allergen = CONFIRMATIONS.length;
-  for (const [i, group] of chunk(CONFIRMATIONS, 3).entries()) {
+  for (const [i, group] of chunk(CONFIRMATIONS, 1).entries()) {
     jobs.push(
       ingest({
         messages: [
@@ -92,11 +92,14 @@ export async function POST() {
           ...group.map((c) => {
             const item = bySku(c.sku)!;
             const verb = c.present ? "contains" : "does not contain";
+            // The date is the citation. Repeat it so extraction cannot drop it.
             return {
               role: "assistant",
               content:
-                `On ${c.confirmed_on}, ${c.source === "incident" ? "an allergen incident established" : "kitchen staff confirmed"} that ` +
-                `${RESTAURANT.name} sku ${c.sku} — ${item.name_en} (${item.name_zh}) — ${verb} ${c.allergen.replace(/_/g, " ")}. ${c.note}`,
+                `CONFIRMATION DATE ${c.confirmed_on}. On ${c.confirmed_on}, ` +
+                `${c.source === "incident" ? "an allergen incident established" : "kitchen staff confirmed"} that ` +
+                `${RESTAURANT.name} sku ${c.sku} — ${item.name_en} (${item.name_zh}) — ${verb} ${c.allergen.replace(/_/g, " ")}. ` +
+                `${c.note} This confirmation is dated ${c.confirmed_on} and was recorded by ${c.source}.`,
             };
           }),
         ],

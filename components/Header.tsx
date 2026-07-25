@@ -1,7 +1,13 @@
 "use client";
 
 import { RESTAURANT } from "@/data/restaurant";
-import { fmtDuration, fmtPhone, type CallStatus, type ZgCall } from "./types";
+import {
+  fmtDuration,
+  fmtPhone,
+  type Beat,
+  type CallStatus,
+  type ZgCall,
+} from "./types";
 import { Listening, PhoneIcon } from "./Ui";
 
 const STATUS: Record<
@@ -43,11 +49,15 @@ export function Header({
   seconds,
   online,
   cadenceMs,
+  beat,
+  error,
 }: {
   call: ZgCall | null;
   seconds: number;
   online: boolean;
   cadenceMs: number;
+  beat: Beat | null;
+  error: string | null;
 }) {
   const status: CallStatus = call?.status ?? "idle";
   const s = STATUS[status];
@@ -81,6 +91,30 @@ export function Header({
           {RESTAURANT.cuisine} · Flushing
         </span>
       </div>
+
+      {/* beat progress — where we are in the simulated call */}
+      {beat && beat.total > 0 ? (
+        <div className="hidden min-w-0 items-center gap-2.5 xl:flex">
+          <span className="mono shrink-0 text-[9px] tracking-[0.2em] text-dim uppercase">
+            beat {Math.min(beat.index, beat.total)}/{beat.total}
+          </span>
+          <span className="flex shrink-0 gap-[3px]">
+            {Array.from({ length: Math.min(beat.total, 14) }, (_, i) => (
+              <span
+                key={i}
+                className={`block h-[3px] w-[9px] rounded-full ${
+                  i < beat.index ? "bg-jade" : "bg-line2"
+                }`}
+              />
+            ))}
+          </span>
+          {beat.note ? (
+            <span className="max-w-[24ch] truncate text-[11.5px] text-muted">
+              {beat.note}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="ml-auto flex items-center gap-4">
         {/* who is on the line */}
@@ -131,14 +165,17 @@ export function Header({
         </div>
 
         {/* poll health */}
-        <div className="hidden flex-col items-end leading-tight md:flex">
+        <div className="hidden max-w-[190px] flex-col items-end leading-tight md:flex">
           <span className="mono text-[9px] tracking-[0.2em] text-dim uppercase">
-            {online ? "sync" : "offline"}
+            {error ? "api" : online ? "sync" : "offline"}
           </span>
           <span
-            className={`mono text-[10px] ${online ? "text-jade" : "text-vermilion"}`}
+            className={`mono max-w-full truncate text-[10px] ${
+              error || !online ? "text-vermilion" : "text-jade"
+            }`}
+            title={error ?? undefined}
           >
-            {online ? `${cadenceMs}ms` : "retrying"}
+            {error ? error : online ? `${cadenceMs}ms` : "retrying"}
           </span>
         </div>
       </div>

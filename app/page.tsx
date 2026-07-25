@@ -190,6 +190,8 @@ export default function Console() {
         seconds={seconds}
         online={online || paused}
         cadenceMs={cadence}
+        beat={state.beat}
+        error={state.error}
       />
 
       {/* main floor */}
@@ -244,6 +246,7 @@ export default function Console() {
           busy={busy}
           running={running}
           note={note}
+          meta={state.scenarios}
           className="min-h-[150px] lg:col-span-3 lg:min-h-0"
         />
       </div>
