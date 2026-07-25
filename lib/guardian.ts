@@ -14,7 +14,7 @@
 //        parsed explicitly and treated as exculpatory, not incriminating.
 
 import { search, ALLERGEN_GROUP } from "./xtrace";
-import { bySku, MENU, type Allergen, type MenuItem } from "@/data/restaurant";
+import { bySku, MENU, CONFIRMATIONS, type Allergen, type MenuItem } from "@/data/restaurant";
 
 export const ALLERGENS: Allergen[] = [
   "peanut", "shellfish", "shrimp", "fish_sauce", "shrimp_paste",
@@ -59,8 +59,29 @@ export interface Hazard {
   evidence: string[];
   confirmations: number;
   lastConfirmed: string | null;
+  source: string | null;
   stale: boolean;
   phrase: string;
+}
+
+/**
+ * XTrace's extraction normalises facts and drops the temporal qualifier, so a
+ * date parsed out of the returned prose is unreliable — verified twice against
+ * the live API. The claim therefore comes from memory; the DATE comes from the
+ * restaurant's structured confirmation record, which is where a real POS would
+ * hold it anyway. Citing a ledger row is also a better answer to "how do you
+ * know?" than citing a sentence a language model rewrote.
+ */
+function ledger(sku: string, allergen: Allergen, present: boolean) {
+  const rows = CONFIRMATIONS.filter(
+    (c) => c.sku === sku && c.allergen === allergen && c.present === present
+  ).sort((a, b) => a.confirmed_on.localeCompare(b.confirmed_on));
+  return {
+    count: rows.length,
+    last: rows.at(-1)?.confirmed_on ?? null,
+    source: rows.at(-1)?.source ?? null,
+    notes: rows.map((r) => `${r.confirmed_on} · ${r.source}: ${r.note}`),
+  };
 }
 
 export interface GuardianVerdict {
@@ -185,13 +206,14 @@ export async function guardianCheck(args: {
           : [`${item.name_en} is prepared with ${label(a)} at this restaurant.` +
              (item.hidden_allergen_note ? ` Note: ${item.hidden_allergen_note}.` : "")]
       )];
-      const dates = positive.flatMap((m) => m.text.match(DATE_RE) ?? []).sort();
-      const last = dates.at(-1) ?? null;
+      const led = ledger(item.sku, a, true);
+      const last = led.last;
       hazards.push({
         allergen: a,
-        evidence,
-        confirmations: positive.length,
+        evidence: [...led.notes, ...evidence],
+        confirmations: Math.max(led.count, positive.length ? 1 : 0),
         lastConfirmed: last,
+        source: led.source,
         stale: last ? daysSince(last) > STALE_DAYS : false,
         phrase: zhPhrase(a),
       });
@@ -200,8 +222,7 @@ export async function guardianCheck(args: {
 
     // Cleared by a dated negative confirmation — but only if it is fresh.
     if (negative.length) {
-      const dates = [...new Set(negative.flatMap((m) => m.text.match(DATE_RE) ?? []))].sort();
-      const last = dates.at(-1) ?? null;
+      const last = ledger(item.sku, a, false).last;
       if (last && daysSince(last) <= STALE_DAYS) continue; // genuinely allow
       unconfirmed.push(a);
       continue;
@@ -216,13 +237,14 @@ export async function guardianCheck(args: {
     const safe = safeAlternative(item, restricted);
     const when = h.lastConfirmed ? ` on ${h.lastConfirmed}` : "";
     const dated = h.lastConfirmed ? "confirmed" : "has on record";
+    const src = h.source === "incident" ? " after an allergen incident" : "";
     const times = h.confirmations > 1 ? `, and it's been confirmed ${h.confirmations} times` : "";
     const alt = safe ? ` The ${safe.name_en} is clear — that's what I'd send you.` : "";
     return {
       verdict: "block", sku: item.sku, nameEn: item.name_en, nameZh: item.name_zh,
       restricted, hazards, searches,
       say:
-        `I'd skip the ${item.name_en}. This kitchen ${dated}${when} that it carries ${label(h.allergen)}${times}.` +
+        `I'd skip the ${item.name_en}. This kitchen ${dated}${when}${src} that it carries ${label(h.allergen)}${times}.` +
         alt +
         ` If you want to check at the counter, say: ${h.phrase}`,
     };

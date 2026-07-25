@@ -269,7 +269,7 @@ function Verdict_({
           className={`border-l-2 text-ink ${look.border} ${
             stage
               ? "mt-5 pl-4 text-[21px] leading-[1.45]"
-              : "mt-2.5 pl-2.5 text-[13px] leading-snug"
+              : "mt-2 line-clamp-3 pl-2.5 text-[13px] leading-snug"
           }`}
         >
           {row.say}
@@ -278,7 +278,7 @@ function Verdict_({
 
       {/* evidence */}
       {row.hazards.length > 0 ? (
-        <div className={stage ? "mt-6 space-y-3" : "mt-3 space-y-2"}>
+        <div className={stage ? "mt-6 space-y-3" : "mt-2 space-y-1.5"}>
           <div className="mono text-[9.5px] font-bold tracking-[0.24em] text-dim uppercase">
             evidence · 憑據
           </div>
@@ -309,11 +309,11 @@ function Verdict_({
                 </span>
               </div>
               {h.evidence.length > 0 ? (
-                <ul className={stage ? "mt-2.5 space-y-1.5" : "mt-1.5 space-y-1"}>
-                  {h.evidence.slice(0, stage ? 5 : 2).map((e, j) => (
+                <ul className={stage ? "mt-2.5 space-y-1.5" : "mt-1 space-y-1"}>
+                  {h.evidence.slice(0, stage ? 5 : 1).map((e, j) => (
                     <li
                       key={j}
-                      className={`flex gap-2 text-muted ${stage ? "text-[14px] leading-snug" : "text-[11px] leading-snug"}`}
+                      className={`flex gap-2 text-muted ${stage ? "text-[14px] leading-snug" : "line-clamp-2 text-[11px] leading-snug"}`}
                     >
                       <span className={look.text}>—</span>
                       <span>{e}</span>

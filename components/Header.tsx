@@ -65,9 +65,9 @@ export function Header({
   const named = call?.guestNameZh ?? call?.guestName ?? null;
 
   return (
-    <header className="flex shrink-0 items-center gap-5 border-b border-line bg-panel/70 px-4 py-2.5 backdrop-blur">
+    <header className="flex shrink-0 items-center gap-4 border-b border-line bg-panel/70 px-4 py-2.5 whitespace-nowrap backdrop-blur">
       {/* wordmark */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <span className="zh-hero text-[30px] leading-none text-jade">掌櫃</span>
         <div className="leading-tight">
           <div className="text-[17px] font-semibold tracking-[0.26em] text-ink">
@@ -79,22 +79,22 @@ export function Header({
         </div>
       </div>
 
-      <div className="h-8 w-px bg-line" />
+      <div className="h-8 w-px shrink-0 bg-line" />
 
       {/* restaurant */}
-      <div className="flex items-baseline gap-2.5">
+      <div className="flex shrink-0 items-baseline gap-2.5">
         <span className="zh text-[22px] leading-none text-gold">
           {RESTAURANT.name_zh}
         </span>
         <span className="text-[14px] font-medium text-ink">{RESTAURANT.name}</span>
-        <span className="mono text-[9.5px] tracking-[0.2em] text-dim uppercase">
+        <span className="mono hidden text-[9.5px] tracking-[0.2em] text-dim uppercase 2xl:inline">
           {RESTAURANT.cuisine} · Flushing
         </span>
       </div>
 
       {/* beat progress — where we are in the simulated call */}
       {beat && beat.total > 0 ? (
-        <div className="hidden min-w-0 items-center gap-2.5 xl:flex">
+        <div className="hidden min-w-0 flex-1 items-center gap-2.5 lg:flex">
           <span className="mono shrink-0 text-[9px] tracking-[0.2em] text-dim uppercase">
             beat {Math.min(beat.index, beat.total)}/{beat.total}
           </span>
@@ -109,17 +109,17 @@ export function Header({
             ))}
           </span>
           {beat.note ? (
-            <span className="max-w-[24ch] truncate text-[11.5px] text-muted">
+            <span className="min-w-0 truncate text-[11.5px] text-muted">
               {beat.note}
             </span>
           ) : null}
         </div>
       ) : null}
 
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex shrink-0 items-center gap-4">
         {/* who is on the line */}
         {named ? (
-          <div className="hidden items-baseline gap-2 xl:flex">
+          <div className="hidden items-baseline gap-2 2xl:flex">
             <span className="mono text-[9.5px] tracking-[0.2em] text-dim uppercase">
               on the line
             </span>

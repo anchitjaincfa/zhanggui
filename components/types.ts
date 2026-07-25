@@ -333,6 +333,9 @@ export function fmtClock(ts: string | null | undefined): string {
 
 export function fmtDate(ts: string | null | undefined): string {
   if (!ts) return "—";
+  // A bare 2026-06-11 parses as UTC midnight and would render as the 10th in
+  // California. Guardian cites these dates on stage — never shift them.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ts)) return ts;
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return ts.slice(0, 10);
   const p = (n: number) => String(n).padStart(2, "0");
