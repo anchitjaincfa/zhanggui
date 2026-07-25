@@ -10,11 +10,14 @@ import { guestCard, secretMenuFor, rememberCall, confirmAllergen, type GuestCard
 import { emit, emitMany, updateCall } from "./store";
 import { bySku, MENU, RESTAURANT } from "@/data/restaurant";
 import type { Action } from "./scenarios";
+import { getShop, type Shop } from "./shop";
 
 export interface RunContext {
   callId: string;
   phone: string | null;
   guest?: GuestCard | null;
+  /** Omitted ⇒ Golden Dragon. */
+  shop?: Shop;
 }
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -66,7 +69,7 @@ export async function doIdentify(ctx: RunContext): Promise<GuestCard | null> {
 }
 
 export async function doSecretMenu(ctx: RunContext) {
-  const picks = await secretMenuFor(ctx.phone);
+  const picks = await secretMenuFor(ctx.phone, { shop: ctx.shop ?? getShop(null) });
   await emitMany(
     ctx.callId,
     picks.map((p) => ({ kind: "secret_menu" as const, title: p.nameEn, detail: { ...p } }))
@@ -95,6 +98,7 @@ export async function doGuardian(ctx: RunContext, sku: string): Promise<Guardian
     guestPhone: ctx.phone,
     sku,
     restrictionsHint: ctx.guest?.restrictions,
+    shop: ctx.shop ?? getShop(null),
   });
 
   await emit(ctx.callId, "guardian", v.nameEn, {
@@ -116,7 +120,7 @@ export async function doGuardian(ctx: RunContext, sku: string): Promise<Guardian
 }
 
 export async function doAdd(ctx: RunContext, sku: string, qty = 1, modifiers: string[] = []) {
-  const item = bySku(sku);
+  const item = (ctx.shop ?? getShop(null)).menu.find((m) => m.sku === sku);
   if (!item) return;
   await emit(ctx.callId, "order", item.name_en, {
     sku, nameEn: item.name_en, nameZh: item.name_zh, qty, modifiers,

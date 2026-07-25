@@ -14,6 +14,7 @@
 //        parsed explicitly and treated as exculpatory, not incriminating.
 
 import { search, ALLERGEN_GROUP, type SearchResult } from "./xtrace";
+import { getShop, groupsFor, type Shop } from "./shop";
 import { bySku, MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
 
 export const ALLERGENS: Allergen[] = [
@@ -113,8 +114,8 @@ export interface Hazard {
  * hold it anyway. Citing a ledger row is also a better answer to "how do you
  * know?" than citing a sentence a language model rewrote.
  */
-function ledger(sku: string, allergen: Allergen, present: boolean) {
-  const rows = CONFIRMATIONS.filter(
+function ledger(sku: string, allergen: Allergen, present: boolean, rowsIn = CONFIRMATIONS) {
+  const rows = rowsIn.filter(
     (c) => c.sku === sku && c.allergen === allergen && c.present === present
   ).sort((a, b) => a.confirmed_on.localeCompare(b.confirmed_on));
   return {
@@ -201,8 +202,14 @@ export async function guardianCheck(args: {
   guestPhone: string | null;
   sku: string;
   restrictionsHint?: Allergen[];
+  /** Omitted ⇒ Golden Dragon, byte-identical to the original behaviour. */
+  shop?: Shop | string | null;
 }): Promise<GuardianVerdict> {
-  const item = bySku(args.sku) ?? MENU[0];
+  const shop = typeof args.shop === "string" || args.shop == null
+    ? getShop(args.shop ?? null) : args.shop;
+  const menu = shop.menu;
+  const allergenGroup = groupsFor(shop).allergen || ALLERGEN_GROUP;
+  const item = menu.find((m) => m.sku === args.sku) ?? menu[0];
   const searches: GuardianVerdict["searches"] = [];
 
   const guestQ = "allergies, dietary restrictions and foods this guest must avoid";
@@ -212,8 +219,8 @@ export async function guardianCheck(args: {
     args.guestPhone
       ? search({ query: guestQ, user_id: args.guestPhone, mode: "retrieve" })
       : Promise.resolve<SearchResult>({ data: [] }),
-    ALLERGEN_GROUP
-      ? search({ query: kitchenQ, group_ids: [ALLERGEN_GROUP], mode: "retrieve" })
+    allergenGroup
+      ? search({ query: kitchenQ, group_ids: [allergenGroup], mode: "retrieve" })
       : Promise.resolve<SearchResult>({ data: [] }),
   ]);
   searches.push({ scope: "guest personal", query: guestQ, rows: guestRes.data.length });
@@ -266,7 +273,7 @@ export async function guardianCheck(args: {
           : [`${item.name_en} is prepared with ${label(a)} at this restaurant.` +
              (item.hidden_allergen_note ? ` Note: ${item.hidden_allergen_note}.` : "")]
       )];
-      const led = ledger(item.sku, a, true);
+      const led = ledger(item.sku, a, true, shop.confirmations);
       const last = led.last;
       hazards.push({
         allergen: a,
@@ -281,7 +288,7 @@ export async function guardianCheck(args: {
     }
 
     // Cleared by a dated negative confirmation — but only if it is fresh.
-    const negLast = negative.length ? ledger(item.sku, a, false).last : null;
+    const negLast = negative.length ? ledger(item.sku, a, false, shop.confirmations).last : null;
     if (negative.length && negLast && daysSince(negLast) <= STALE_DAYS) continue;
     const staleNegative = negative.length > 0;
 
@@ -309,7 +316,7 @@ export async function guardianCheck(args: {
     hazards.length = 0;
     hazards.push(...deduped);
     const h = hazards[0];
-    const safe = safeAlternative(item, restricted);
+    const safe = safeAlternative(item, restricted, menu);
     const when = h.lastConfirmed ? ` on ${h.lastConfirmed}` : "";
     const dated = h.lastConfirmed ? "confirmed" : "has on record";
     const src = h.source === "incident" ? " after an allergen incident" : "";
@@ -353,8 +360,10 @@ export async function guardianCheck(args: {
  * be told is safe: nothing declared, no hidden-ingredient note, and no
  * cross-contact route from its station.
  */
-export function safeAlternative(from: MenuItem, restricted: Allergen[]): MenuItem | null {
-  const clear = MENU.filter((m) => {
+export function safeAlternative(
+  from: MenuItem, restricted: Allergen[], menu: MenuItem[] = MENU
+): MenuItem | null {
+  const clear = menu.filter((m) => {
     if (m.sku === from.sku || !m.available) return false;
     if (m.allergens.some((a) => restricted.includes(a))) return false;
     if (m.hidden_allergen_note) return false;

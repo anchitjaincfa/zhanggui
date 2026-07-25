@@ -9,6 +9,7 @@
 import { search, searchMany, ingestDetached, KITCHEN_GROUP, ALLERGEN_GROUP, type Memory } from "./xtrace";
 import { MENU, RESTAURANT, bySku, type Allergen } from "@/data/restaurant";
 import { extractRestrictions } from "./guardian";
+import { getShop, groupsFor, type Shop } from "./shop";
 
 export interface GuestCard {
   phone: string;
@@ -82,14 +83,16 @@ export interface SecretPick {
 }
 
 /** What a twenty-year regular would order here, for this particular guest. */
-export async function secretMenuFor(phone: string | null, opts?: { weekday?: boolean }): Promise<SecretPick[]> {
+export async function secretMenuFor(phone: string | null, opts?: { weekday?: boolean; shop?: Shop }): Promise<SecretPick[]> {
+  const shop = opts?.shop ?? getShop(null);
+  const kitchenGroup = groupsFor(shop).kitchen || KITCHEN_GROUP;
   const weekday = opts?.weekday ?? ![0, 6].includes(new Date().getDay());
 
   const [kitchen, guest] = await Promise.all([
-    KITCHEN_GROUP
+    kitchenGroup
       ? search({
           query: "what can this kitchen actually make that is not on the English menu?",
-          group_ids: [KITCHEN_GROUP],
+          group_ids: [kitchenGroup],
           mode: "retrieve",
         })
       : Promise.resolve({ data: [] as Memory[] }),
@@ -104,7 +107,7 @@ export async function secretMenuFor(phone: string | null, opts?: { weekday?: boo
   const likesNumbing = /numbing|mala|麻|sichuan pepper/.test(tastes);
   const avoidsSweet = /dislikes? .*sweet|too sweet|avoid.*sweet/.test(tastes);
 
-  const candidates = MENU.filter(
+  const candidates = shop.menu.filter(
     (m) => !m.english_listed && m.available && !m.allergens.some((a) => restricted.includes(a))
   ).filter((m) => (m.weekday_only ? weekday : true));
 
