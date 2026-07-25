@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0a0b;
+  --panel: #141416;
+  --line: #26262a;
+  --ink: #ededef;
+  --muted: #8a8a92;
+  --jade: #35c48f;
+  --vermilion: #e2564a;
+  --gold: #d9a441;
+}
+
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
