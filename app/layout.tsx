@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+export const viewport = { width: "device-width", initialScale: 1, maximumScale: 1, themeColor: "#0a0a0b" };
+
 export const metadata: Metadata = {
   title: "掌櫃 ZHANGGUI — the shopkeeper who never forgets",
   description:
