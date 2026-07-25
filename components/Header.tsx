@@ -1,0 +1,147 @@
+"use client";
+
+import { RESTAURANT } from "@/data/restaurant";
+import { fmtDuration, fmtPhone, type CallStatus, type ZgCall } from "./types";
+import { Listening, PhoneIcon } from "./Ui";
+
+const STATUS: Record<
+  CallStatus,
+  { label: string; zh: string; text: string; dot: string; ring: string }
+> = {
+  idle: {
+    label: "STANDBY",
+    zh: "待機",
+    text: "text-muted",
+    dot: "bg-dim",
+    ring: "border-line2 bg-panel2",
+  },
+  ringing: {
+    label: "RINGING",
+    zh: "來電",
+    text: "text-gold",
+    dot: "bg-gold",
+    ring: "border-gold/50 bg-gold/10",
+  },
+  active: {
+    label: "ON CALL",
+    zh: "通話中",
+    text: "text-jade",
+    dot: "bg-jade",
+    ring: "border-jade/50 bg-jade/10",
+  },
+  ended: {
+    label: "ENDED",
+    zh: "已結束",
+    text: "text-muted",
+    dot: "bg-line2",
+    ring: "border-line2 bg-panel2",
+  },
+};
+
+export function Header({
+  call,
+  seconds,
+  online,
+  cadenceMs,
+}: {
+  call: ZgCall | null;
+  seconds: number;
+  online: boolean;
+  cadenceMs: number;
+}) {
+  const status: CallStatus = call?.status ?? "idle";
+  const s = STATUS[status];
+  const live = status === "active";
+  const named = call?.guestNameZh ?? call?.guestName ?? null;
+
+  return (
+    <header className="flex shrink-0 items-center gap-5 border-b border-line bg-panel/70 px-4 py-2.5 backdrop-blur">
+      {/* wordmark */}
+      <div className="flex items-center gap-3">
+        <span className="zh-hero text-[30px] leading-none text-jade">掌櫃</span>
+        <div className="leading-tight">
+          <div className="text-[17px] font-semibold tracking-[0.26em] text-ink">
+            ZHANGGUI
+          </div>
+          <div className="mono text-[9px] tracking-[0.28em] text-dim uppercase">
+            AI front desk
+          </div>
+        </div>
+      </div>
+
+      <div className="h-8 w-px bg-line" />
+
+      {/* restaurant */}
+      <div className="flex items-baseline gap-2.5">
+        <span className="zh text-[22px] leading-none text-gold">
+          {RESTAURANT.name_zh}
+        </span>
+        <span className="text-[14px] font-medium text-ink">{RESTAURANT.name}</span>
+        <span className="mono text-[9.5px] tracking-[0.2em] text-dim uppercase">
+          {RESTAURANT.cuisine} · Flushing
+        </span>
+      </div>
+
+      <div className="ml-auto flex items-center gap-4">
+        {/* who is on the line */}
+        {named ? (
+          <div className="hidden items-baseline gap-2 xl:flex">
+            <span className="mono text-[9.5px] tracking-[0.2em] text-dim uppercase">
+              on the line
+            </span>
+            <span
+              className={`${call?.guestNameZh ? "zh text-[17px]" : "text-[15px] font-semibold"} text-ink`}
+            >
+              {named}
+            </span>
+          </div>
+        ) : null}
+
+        {/* number to call */}
+        <div className="hidden text-right leading-tight lg:block">
+          <div className="mono text-[9px] tracking-[0.24em] text-dim uppercase">
+            call the front desk
+          </div>
+          <div className="mono flex items-center justify-end gap-1.5 text-[14px] font-semibold text-ink">
+            <PhoneIcon className="size-3.5 text-jade" />
+            {fmtPhone(RESTAURANT.phone)}
+          </div>
+          <div className="mono text-[9.5px] text-dim">
+            sip:golden-dragon@sip.vapi.ai
+          </div>
+        </div>
+
+        {/* status pill */}
+        <div
+          className={`flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 ${s.ring}`}
+        >
+          <span
+            className={`inline-block size-2 rounded-full ${s.dot} ${s.text} ${live ? "zg-ping" : ""}`}
+          />
+          <span
+            className={`mono text-[11px] font-bold tracking-[0.2em] ${s.text}`}
+          >
+            {s.label}
+          </span>
+          <span className={`zh text-[13px] ${s.text} opacity-70`}>{s.zh}</span>
+          {live ? <Listening /> : null}
+          <span className="mono min-w-[46px] text-right text-[15px] font-semibold tabular-nums text-ink">
+            {fmtDuration(seconds)}
+          </span>
+        </div>
+
+        {/* poll health */}
+        <div className="hidden flex-col items-end leading-tight md:flex">
+          <span className="mono text-[9px] tracking-[0.2em] text-dim uppercase">
+            {online ? "sync" : "offline"}
+          </span>
+          <span
+            className={`mono text-[10px] ${online ? "text-jade" : "text-vermilion"}`}
+          >
+            {online ? `${cadenceMs}ms` : "retrying"}
+          </span>
+        </div>
+      </div>
+    </header>
+  );
+}
