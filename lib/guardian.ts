@@ -209,7 +209,14 @@ const mentions = (text: string, a: Allergen) => {
  * the hazard only if every one of them negates it. One unqualified "contains
  * peanut" outvotes any amount of reassuring prose around it.
  */
-function isNegatedFor(text: string, a: Allergen): boolean {
+/** Phrases that look like negation but are in fact a warning. "Not safe for
+ *  peanut allergies" was being read as "contains no peanut" — the exact
+ *  inversion of what the kitchen meant. */
+const DANGER_DESPITE_NOT =
+  /\bnot safe\b|\bnot suitable\b|\bnot ok\b|\bnot okay\b|\bnot recommended\b|\bnot for\b|\bunsafe\b|\bavoid\b|\bnot free\b/i;
+
+export function isNegatedFor(text: string, a: Allergen): boolean {
+  if (DANGER_DESPITE_NOT.test(text)) return false;
   const clauses = text.split(/[.;:!?]|,(?=\s*(?:but|however|though)\b)|\bbut\b|\bhowever\b|[。；！？]/i);
   const naming = clauses.filter((c) => c.trim() && mentions(c, a));
   if (!naming.length) return NEGATION.test(text); // fall back to the old behaviour
@@ -233,6 +240,10 @@ export function extractRestrictions(rows: { text: string }[]): Allergen[] {
   for (const r of rows) {
     const text = norm(r.text);
     if (!RESTRICTION_CUES.test(text)) continue;
+    // Some people name the condition, not the ingredient. "I have celiac
+    // disease" contains no allergen word at all and was extracting nothing.
+    if (/\bcoeliac|\bceliac/.test(text)) found.add("gluten");
+    if (/lactose|dairy.free|\bvegan\b/.test(text)) found.add("dairy");
     for (const a of ALLERGENS) {
       if (mentions(text, a)) {
         found.add(a);

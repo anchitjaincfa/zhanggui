@@ -16,6 +16,7 @@ import { resolveItem, didYouMean } from "@/lib/resolve";
 import {
   identifyByPhone, identifyByBirthday, linkPhoneToProfile, describe, greeting, sayBirthday,
 } from "@/lib/identity";
+import { PROFILES } from "@/data/guests";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -26,6 +27,17 @@ const say = (result: string, extra: Record<string, unknown> = {}) =>
 export async function POST(req: Request) {
   let body: Record<string, unknown> = {};
   try { body = (await req.json()) as Record<string, unknown>; } catch { /* keep going */ }
+
+  // Parsed out here, not inside the catch. The catch used to re-derive the
+  // action from the body and missed the `parameters` shape, so a thrown error
+  // on an `add` fell through to "take the order normally" — the gate failing
+  // open on exactly the payload Vapi's dashboard tool sends.
+  let attempted = "";
+  try {
+    const i = (body.message ?? body) as Record<string, unknown>;
+    const a = (i.arguments ?? i.parameters ?? i) as Record<string, unknown>;
+    attempted = String(a?.action ?? "").toLowerCase().trim();
+  } catch { /* attempted stays empty */ }
 
   try {
     // The dashboard tool may nest the model's arguments; accept either shape.
@@ -62,11 +74,25 @@ export async function POST(req: Request) {
     const callId = existing?.id ?? (await createCall({ vapiCallId, phone, channel: "phone" }));
     const ctx: RunContext = { callId, phone: phone ?? existing?.caller_phone ?? null };
 
+    // Who this caller turned out to be, on THIS call.
+    //
+    // Identity from a birthday lives only in the response to the `birthday`
+    // call. The `add` that follows is a fresh HTTP request with no memory of
+    // it: a caller identified by birthday from an unrecognised phone arrived
+    // at the gate as a stranger with no restrictions, and the gate — correctly,
+    // given what it was told — allowed the dish. The name is already persisted
+    // on the call row, so rehydrate the profile from it before every action.
+    const profile =
+      identifyByPhone(ctx.phone) ??
+      (existing?.guest_name
+        ? PROFILES.find((p) => p.name === existing.guest_name) ?? null
+        : null);
+
     switch (action) {
       // Caller ID first. It asks the guest for nothing, so it is always worth
       // trying before the desk starts interrogating anyone.
       case "identify": {
-        const local = identifyByPhone(ctx.phone);
+        const local = profile;
         if (local) {
           await updateCall(callId, { guest_name: local.name, language: local.language, caller_phone: ctx.phone });
           void doIdentify(ctx); // fills the Ghost CRM panel from memory, in the background
@@ -231,6 +257,18 @@ export async function POST(req: Request) {
             `${alt.map((m) => m.name_en).join(" or ") || "anything else on the menu"}.`
           );
         }
+        // Hand the gate what we know about this caller even when the phone is
+        // a stranger's — otherwise a birthday-identified guest is checked as
+        // though they had told us nothing.
+        if (profile && !ctx.guest) {
+          ctx.guest = {
+            phone: ctx.phone ?? profile.phone, name: profile.name, nameZh: profile.name_zh,
+            language: profile.language, restrictions: profile.restrictions as never[],
+            dislikes: [], spice: String(profile.spice), fulfilment: profile.fulfilment,
+            cadence: profile.cadence, notes: profile.notes, orderCount: profile.visits,
+            knownSince: profile.since, raw: [],
+          };
+        }
         const v = await doGuardian(ctx, item.sku);
         if (v.verdict === "allow") {
           // item.sku, not the caller's words — doAdd looks the item up again and
@@ -273,11 +311,7 @@ export async function POST(req: Request) {
     // A blanket "take the order normally" is the right answer for a menu lookup
     // and exactly the wrong one for the gate: an exception thrown anywhere
     // inside an `add` would wave the item through unchecked. Refuse instead.
-    const failedAction = String(
-      ((body.message ?? body) as Record<string, unknown>)?.action ??
-      (((body.message ?? body) as Record<string, unknown>)?.arguments as Record<string, unknown>)?.action ??
-      ""
-    ).toLowerCase().trim();
+    const failedAction = attempted;
     const softError = err instanceof Error ? err.message : String(err);
 
     if (failedAction === "add" || failedAction === "add_item") {

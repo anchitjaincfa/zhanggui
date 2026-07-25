@@ -34,17 +34,31 @@ const MONTHS: Record<string, number> = {
   七月: 7, 八月: 8, 九月: 9, 十月: 10, 十一月: 11, 十二月: 12,
 };
 
-const ONES: Record<string, number> = {
+const CARDINAL: Record<string, number> = {
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
   eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
   fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
   nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
   seventy: 70, eighty: 80, ninety: 90,
+};
+
+/**
+ * Ordinals are kept separate from cardinals, and it is not pedantry.
+ *
+ * "November nineteenth nineteen fifty seven" used to parse as 1969-11-07,
+ * because the year scanner saw "nineteenth" (19), took it for the start of a
+ * year, and ate the real year's words as its tail. A date that is wrong but
+ * confident is the most dangerous output this file can produce — it attaches a
+ * caller to a stranger's allergy record. A year never begins with an ordinal.
+ */
+const ORDINAL: Record<string, number> = {
   first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7,
   eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13,
   fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17,
   eighteenth: 18, nineteenth: 19, twentieth: 20, thirtieth: 30,
 };
+
+const ONES: Record<string, number> = { ...CARDINAL, ...ORDINAL };
 
 /**
  * "nineteen ninety four" → 1994 · "two thousand one" → 2001
@@ -54,9 +68,10 @@ const ONES: Record<string, number> = {
  * date comes out as 2004-01-19 — a confidently wrong answer, which is worse
  * than no answer when the next step is reading someone's allergies aloud.
  */
-function spokenYearAt(words: string[]): { year: number; used: Set<number> } | null {
+export function spokenYearAt(words: string[]): { year: number; used: Set<number> } | null {
   for (let i = 0; i < words.length; i++) {
-    const head = ONES[words[i]];
+    // A year is spoken in cardinals. "nineteenth" is a day, always.
+    const head = CARDINAL[words[i]];
 
     // "two thousand (and) five"
     if (head !== undefined && words[i + 1] === "thousand") {
@@ -64,7 +79,7 @@ function spokenYearAt(words: string[]): { year: number; used: Set<number> } | nu
       let rest = 0;
       for (let j = i + 2; j < Math.min(words.length, i + 5); j++) {
         if (words[j] === "and") { used.add(j); continue; }
-        const v = ONES[words[j]];
+        const v = CARDINAL[words[j]];
         if (v === undefined || v > 99 || rest + v > 99) break;
         rest += v; used.add(j);
       }
@@ -73,17 +88,50 @@ function spokenYearAt(words: string[]): { year: number; used: Set<number> } | nu
     }
 
     // "nineteen ninety four" / "twenty oh five"
-    if (head !== undefined && head >= 17 && head <= 20) {
+    //
+    // The second word must be a TENS word (or "oh"/"hundred"). Without that
+    // rule, "July twenty third nineteen ninety" read "twenty three nineteen"
+    // as the year 2022 and then had no day left to find. A year is not spoken
+    // as "twenty three"; a date is.
+    const next = words[i + 1];
+    const startsAYear =
+      next === "oh" || next === "hundred" ||
+      (CARDINAL[next] !== undefined && CARDINAL[next] >= 20 && CARDINAL[next] % 10 === 0);
+
+    if (head !== undefined && head >= 17 && head <= 20 && startsAYear) {
       const used = new Set([i]);
       let tail = 0;
       for (let j = i + 1; j < Math.min(words.length, i + 3); j++) {
-        const v = ONES[words[j]];
+        if (words[j] === "oh" || words[j] === "hundred") { used.add(j); continue; }
+        // Cardinals only: an ordinal here is the day, not part of the year.
+        const v = CARDINAL[words[j]];
         if (v === undefined || v > 99 || tail + v > 99) break;
         tail += v; used.add(j);
       }
       const year = head * 100 + tail;
       if (year >= 1900 && year <= 2026 && used.size > 1) return { year, used };
     }
+  }
+  return null;
+}
+
+/**
+ * The day, from the words the year did not claim.
+ *
+ * "thirty first" is two words and one number. Reading only the first of them
+ * turned the 31st into the 30th — a silent off-by-one in an identifier.
+ */
+export function spokenDay(words: string[], used?: Set<number>): number | null {
+  for (let i = 0; i < words.length; i++) {
+    if (used?.has(i)) continue;
+    const v = ONES[words[i]];
+    if (v === undefined) continue;
+    // "twenty second", "thirty first"
+    if ((v === 20 || v === 30) && !used?.has(i + 1)) {
+      const unit = ONES[words[i + 1]];
+      if (unit !== undefined && unit >= 1 && unit <= 9) return v + unit;
+    }
+    if (v >= 1 && v <= 31) return v;
   }
   return null;
 }
@@ -119,13 +167,7 @@ export function parseBirthday(input: string): string | null {
 
     const year = nums.find((n) => n > 31) ?? spoken?.year ?? null;
     // The day may be a digit, or a word the year did NOT already claim.
-    const day =
-      nums.find((n) => n >= 1 && n <= 31) ??
-      words.reduce<number | null>((acc, w, i) => {
-        if (acc !== null || spoken?.used.has(i)) return acc;
-        const v = ONES[w];
-        return v !== undefined && v >= 1 && v <= 31 ? v : acc;
-      }, null);
+    const day = nums.find((n) => n >= 1 && n <= 31) ?? spokenDay(words, spoken?.used);
 
     if (year && day && year > 1900 && year < 2026) return `${year}-${pad(month)}-${pad(day)}`;
     return null;
@@ -190,10 +232,17 @@ export function identifyByBirthday(spoken: string, nameHint?: string): IdentityO
   if (hits.length === 1) return { status: "matched", profile: hits[0], via: "birthday" };
 
   if (nameHint) {
-    const n = nameHint.toLowerCase().trim();
-    const narrowed = hits.filter(
-      (p) => p.name.toLowerCase().includes(n) || n.includes(p.name.toLowerCase().split(" ")[0])
+    // Whole-token match only. Substring matching made "Priyanka" resolve to
+    // Priya Raman and handed over her record — and "not Priya" matched too.
+    // The hint arrives as the whole utterance, so tokenise and compare words.
+    const said = new Set(
+      nameHint.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean)
     );
+    const negated = /\bnot\b|\bisn'?t\b|\bwrong\b/i.test(nameHint);
+    const narrowed = negated ? [] : hits.filter((p) => {
+      const parts = p.name.toLowerCase().split(/\s+/);
+      return parts.some((part) => said.has(part));
+    });
     if (narrowed.length === 1) return { status: "matched", profile: narrowed[0], via: "birthday" };
   }
   return { status: "ambiguous", candidates: hits };
