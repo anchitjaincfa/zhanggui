@@ -3,89 +3,55 @@
 // REGULARS — "Who are our regulars, and what do they want?"
 //
 // The customer book an owner never had time to write. Nobody typed any of it;
-// it fell out of the phone calls. The two things that must read from across a
-// counter are the name and the red "cannot eat" chips — everything else is
-// supporting detail.
+// it fell out of the phone calls. Every card carries the whole of what we know
+// about one person, in the order an owner would want it: who they are, what
+// they cannot eat, what they always order, and then the small things.
 //
-// /api/state only carries whoever is on the phone right now, so the book itself
-// comes from the restaurant's own guest list and the live call is used only to
-// mark one card as "on a call".
+// The two things that must read from across a counter are the name and the red
+// "cannot eat" chips. A guest with a restriction gets a red stripe down the
+// left of the card, so the dangerous ones are countable at a glance without
+// reading a single word.
+//
+// The book is a static list, so nothing here can fail to load.
 
-import Shell, { useT, useLive } from "../Shell";
+import Shell, { useT } from "../Shell";
 import "../theme.css";
 import { allergen, type Key, type Lang } from "@/lib/i18n";
-import { GUESTS, MENU, type SeedGuest } from "@/data/restaurant";
+import { PROFILES, type Profile } from "@/data/guests";
+import { bySku } from "@/data/restaurant";
 import { fmtPhone } from "@/components/types";
 
-/* ── the slice of /api/state this page reads ──────────────────────── */
+/* ── dates, written the way a person says them ────────────────────── */
 
-interface GuestCard {
-  phone?: string | null;
-  name?: string | null;
-  nameZh?: string | null;
+const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "1993-06-17" → "17 Jun 1993" / "1993年6月17日". Never parsed as a Date:
+ *  a bare ISO day parses as UTC midnight and would show the day before here. */
+function fmtDay(iso: string, lang: Lang): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? "");
+  if (!m) return iso || "—";
+  const year = m[1] ?? "";
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (lang === "zh") return `${year}年${month}月${day}日`;
+  return `${day} ${MONTHS_EN[month - 1] ?? m[2]} ${year}`;
 }
 
-interface CallInfo {
-  status?: string | null;
-}
+/* ── heat, as a word plus a shape ─────────────────────────────────── */
 
-interface GuestsState {
-  call?: CallInfo | null;
-  guestCard?: GuestCard | null;
-}
+const SPICE_KEYS: Key[] = ["spice0", "spice1", "spice2", "spice3", "spice4", "spice5"];
+const spiceKey = (n: number): Key =>
+  SPICE_KEYS[Math.min(5, Math.max(0, Math.round(Number(n) || 0)))] ?? "spice0";
 
-/* ── reading a guest's facts without asking a machine ─────────────── */
+/* ── skus are never shown to a person; they become dish names ─────── */
 
-const digits = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "");
+interface Dish { nameEn: string; nameZh: string }
 
-/** Words that mean "must not eat", so "no cilantro" never becomes an allergy. */
-const CUE = /allerg|anaphyla|intoleran|avoid|cannot eat|can'?t eat|must not eat|free from|sensitiv/i;
-
-const SYNONYMS: Record<string, string[]> = {
-  peanut: ["peanut", "peanuts", "groundnut"],
-  shellfish: ["shellfish", "crustacean", "crab", "lobster", "scallop"],
-  shrimp: ["shrimp", "prawn", "prawns"],
-  shrimp_paste: ["shrimp paste"],
-  fish_sauce: ["fish sauce"],
-  gluten: ["gluten", "wheat", "flour"],
-  dairy: ["dairy", "milk", "cream", "butter", "cheese"],
-  sesame: ["sesame", "tahini"],
-  tree_nut: ["tree nut", "tree nuts", "walnut", "walnuts", "cashew", "almond"],
-  egg: ["egg", "eggs"],
-  soy: ["soy", "soya", "soybean"],
-};
-
-/** shellfish implies shrimp implies shrimp paste — an owner would assume it. */
-const IMPLIES: Record<string, string[]> = {
-  shellfish: ["shrimp", "shrimp_paste"],
-  shrimp: ["shrimp_paste"],
-};
-
-const mentions = (text: string, word: string) =>
-  new RegExp(`(?:^|[^a-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z]|$)`, "i").test(text);
-
-function cannotEat(facts: string[]): string[] {
-  const found = new Set<string>();
-  for (const fact of facts) {
-    if (!CUE.test(fact)) continue;
-    for (const [key, words] of Object.entries(SYNONYMS)) {
-      if (words.some((w) => mentions(fact, w))) {
-        found.add(key);
-        for (const implied of IMPLIES[key] ?? []) found.add(implied);
-      }
-    }
-  }
-  return [...found];
-}
-
-/** Dishes this guest is on record asking for, matched against the real menu. */
-function usualDishes(facts: string[]): { nameEn: string; nameZh: string }[] {
-  const out: { nameEn: string; nameZh: string }[] = [];
-  for (const item of MENU) {
-    const hit = facts.some(
-      (f) => f.toLowerCase().includes(item.name_en.toLowerCase()) || f.includes(item.name_zh),
-    );
-    if (hit) out.push({ nameEn: item.name_en, nameZh: item.name_zh });
+function dishes(usual: string[] | undefined): Dish[] {
+  const out: Dish[] = [];
+  for (const sku of usual ?? []) {
+    const item = bySku(sku);
+    if (item) out.push({ nameEn: item.name_en, nameZh: item.name_zh });
   }
   return out;
 }
@@ -102,18 +68,11 @@ export default function GuestsPage() {
 
 function Body() {
   const { t, lang } = useT();
-  const { data } = useLive<GuestsState>("/api/state?callId=latest", 2000);
 
-  const onPhone = digits(data?.guestCard?.phone);
-  const callLive = data?.call?.status === "active" || data?.call?.status === "ringing";
-  const book: SeedGuest[] = GUESTS ?? [];
+  const book: Profile[] = PROFILES ?? [];
+  const withAvoids = book.filter((g) => (g.restrictions ?? []).length > 0).length;
 
-  // Somebody is on the phone who is not in the book yet. Say so rather than
-  // silently leaving them out.
-  const strangerOnPhone =
-    onPhone.length > 0 && !book.some((g) => digits(g.phone) === onPhone) ? data?.guestCard ?? null : null;
-
-  if (book.length === 0 && !strangerOnPhone) {
+  if (book.length === 0) {
     return (
       <div className="r-card px-6 py-14 text-center">
         <div className="text-[20px] font-semibold">{t("noGuests")}</div>
@@ -126,158 +85,174 @@ function Body() {
 
   return (
     <div className="flex flex-col gap-6">
-      {strangerOnPhone && (
-        <article className="r-card stripe stripe-ask p-6 lg:p-7">
-          <span className="chip chip-ask">
-            <span
-              className="live-dot inline-block h-2.5 w-2.5 rounded-full"
-              style={{ background: "var(--ms-blue)" }}
-              aria-hidden="true"
-            />
-            {t("onCall")}
-          </span>
-          <div className="mt-4 text-[26px] font-bold leading-tight">
-            {(strangerOnPhone.nameZh ?? strangerOnPhone.name ?? "").trim() || t("newGuest")}
-          </div>
-          <div className="num mt-1.5 text-[18px] font-semibold" style={{ color: "var(--muted)" }}>
-            {fmtPhone(strangerOnPhone.phone)}
-          </div>
-          <p className="mt-4 text-[15px] leading-relaxed" style={{ color: "var(--muted)" }}>
-            {t("learnedFrom")} · {t("fromCalls")}
+      {/* ── how many people are in the book ───────────────────────── */}
+      <section className="r-card flex flex-wrap items-end gap-x-12 gap-y-5 p-6 lg:p-7">
+        <div>
+          <p className="eyebrow">{t("inTheBook")}</p>
+          <p className="num mt-2 text-[44px] font-bold leading-none">{book.length}</p>
+        </div>
+        <div>
+          <p className="eyebrow">{t("withAvoids")}</p>
+          <p className="num mt-2 text-[44px] font-bold leading-none" style={{ color: "var(--stop-ink)" }}>
+            {withAvoids}
           </p>
-        </article>
-      )}
+        </div>
+        <p className="ml-auto text-[14px]" style={{ color: "var(--muted)" }}>
+          {t("learnedFrom")} · {t("fromCalls")}
+        </p>
+      </section>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      {/* ── the book itself ───────────────────────────────────────── */}
+      <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
         {book.map((guest) => (
-          <GuestBookCard
-            key={guest.phone}
-            guest={guest}
-            lang={lang}
-            t={t}
-            onCall={digits(guest.phone) === onPhone && callLive}
-          />
+          <GuestCard key={guest.id} guest={guest} lang={lang} t={t} />
         ))}
       </div>
     </div>
   );
 }
 
-function GuestBookCard({
+function GuestCard({
   guest,
   lang,
   t,
-  onCall,
 }: {
-  guest: SeedGuest;
+  guest: Profile;
   lang: Lang;
   t: (k: Key) => string;
-  onCall: boolean;
 }) {
-  // Allergens and dishes are derived from the English facts because the
-  // matchers are English; the Chinese prose is for reading, not parsing.
-  const source = guest.facts ?? [];
-  const shown = (lang === "zh" ? guest.facts_zh : guest.facts) ?? source;
-  const avoid = cannotEat(source);
-  const dishes = usualDishes(source);
+  const avoid = guest.restrictions ?? [];
+  const usual = dishes(guest.usual);
+  const notes = guest.notes ?? [];
   const zh = (guest.name_zh ?? "").trim();
 
   return (
-    <article className={`r-card stripe ${onCall ? "stripe-ask" : ""} flex flex-col gap-5 p-6 lg:p-7`}>
-      {/* name + phone */}
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          {zh ? (
-            <>
-              <h2 className="text-[30px] font-bold leading-tight lg:text-[34px]">{zh}</h2>
-              <div className="text-[17px]" style={{ color: "var(--ink-2)" }}>
-                {guest.name}
-              </div>
-            </>
-          ) : (
-            <h2 className="text-[26px] font-bold leading-tight lg:text-[29px]">{guest.name}</h2>
-          )}
-          <div className="num mt-2 text-[17px] font-semibold" style={{ color: "var(--muted)" }}>
-            {fmtPhone(guest.phone)}
-          </div>
-        </div>
-
-        {onCall && (
-          <span className="chip chip-ask">
-            <span
-              className="live-dot inline-block h-2.5 w-2.5 rounded-full"
-              style={{ background: "var(--ms-blue)" }}
-              aria-hidden="true"
-            />
-            {t("onCall")}
-          </span>
+    <article
+      className={`r-card stripe ${avoid.length ? "stripe-stop" : ""} flex flex-col gap-5 p-5 lg:p-6`}
+    >
+      {/* ── who ────────────────────────────────────────────────── */}
+      <header>
+        {zh ? (
+          <>
+            <h2 className="text-[27px] font-bold leading-tight">{zh}</h2>
+            <div className="text-[16px]" style={{ color: "var(--ink-2)" }}>{guest.name}</div>
+          </>
+        ) : (
+          <h2 className="text-[24px] font-bold leading-tight">{guest.name}</h2>
         )}
+        <div className="num mt-2 text-[16px] font-semibold" style={{ color: "var(--muted)" }}>
+          {fmtPhone(guest.phone)}
+        </div>
       </header>
 
-      {/* cannot eat — the line that stops an ambulance being called */}
+      {/* ── cannot eat — the line that stops an ambulance ───────── */}
       <div>
         <div className="eyebrow">{t("avoids")}</div>
-        {avoid.length === 0 ? (
-          <p className="mt-2 text-[16px]" style={{ color: "var(--muted)" }}>
-            —
-          </p>
-        ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {avoid.map((a) => (
-              <span key={a} className="chip chip-stop text-[15px]">
-                {allergen(a, lang)}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {avoid.length === 0 ? (
+            <span className="chip chip-flat">{t("nothingToAvoid")}</span>
+          ) : (
+            avoid.map((a) => (
+              <span key={a} className="chip chip-stop text-[15px]">{allergen(a, lang)}</span>
+            ))
+          )}
+        </div>
       </div>
 
-      {/* usually orders */}
+      {/* ── the small facts, in one block ──────────────────────── */}
+      <div className="r-sunk grid grid-cols-2 gap-x-5 gap-y-4 px-4 py-4">
+        <Fact label={t("birthday")}>
+          <span className="num">{fmtDay(guest.birthday, lang)}</span>
+        </Fact>
+        <Fact label={t("speaks")}>{guest.language === "zh" ? t("langZh") : t("langEn")}</Fact>
+        <Fact label={t("heat")}>
+          <span className="flex items-center gap-2">
+            {t(spiceKey(guest.spice))}
+            <Pips level={guest.spice} />
+          </span>
+        </Fact>
+        <Fact label={t("takesIt")}>{guest.fulfilment === "delivery" ? t("delivery") : t("pickup")}</Fact>
+        <Fact label={t("visits")}>
+          <span className="num">{guest.visits}</span>
+        </Fact>
+        <Fact label={t("orderingSince")}>
+          <span className="num">{fmtDay(guest.since, lang)}</span>
+        </Fact>
+      </div>
+
+      {/* ── what they always order ─────────────────────────────── */}
       <div>
         <div className="eyebrow">{t("usualOrder")}</div>
-        {dishes.length === 0 ? (
-          <p className="mt-2 text-[16px]" style={{ color: "var(--muted)" }}>
-            —
-          </p>
+        {usual.length === 0 ? (
+          <p className="mt-2 text-[16px]" style={{ color: "var(--muted)" }}>—</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
-            {dishes.map((d) => (
-              <li key={d.nameEn} className="r-sunk px-4 py-3">
-                <div className="text-[22px] font-semibold leading-tight">{d.nameZh}</div>
-                <div className="text-[15px]" style={{ color: "var(--muted)" }}>
-                  {d.nameEn}
-                </div>
+            {usual.map((d) => (
+              <li key={d.nameEn} className="r-sunk px-4 py-2.5">
+                <div className="text-[19px] font-semibold leading-tight">{d.nameZh}</div>
+                <div className="text-[14px]" style={{ color: "var(--muted)" }}>{d.nameEn}</div>
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      {/* what we know, and how we know it */}
+      {/* ── when they call ─────────────────────────────────────── */}
+      <div>
+        <div className="eyebrow">{t("whenTheyOrder")}</div>
+        <p className="mt-1.5 text-[15px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
+          {guest.cadence || "—"}
+        </p>
+      </div>
+
+      {/* ── everything else we picked up on the phone ──────────── */}
       <div>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="eyebrow">{t("knownFor")}</div>
-          <div className="text-[13px]" style={{ color: "var(--muted)" }}>
-            {t("learnedFrom")} · {t("fromCalls")} · <span className="num">{shown.length}</span>
-          </div>
+          <div className="num text-[13px]" style={{ color: "var(--muted)" }}>{notes.length}</div>
         </div>
-        {shown.length === 0 ? (
-          <p className="mt-2 text-[16px]" style={{ color: "var(--muted)" }}>
-            {t("noGuests")}
-          </p>
+        {notes.length === 0 ? (
+          <p className="mt-2 text-[15px]" style={{ color: "var(--muted)" }}>—</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1.5">
-            {shown.map((f, i) => (
-              <li key={i} className="flex gap-2.5 text-[15px] leading-relaxed" style={{ color: "var(--ink-2)" }}>
-                <span aria-hidden="true" style={{ color: "var(--muted)" }}>
-                  ·
-                </span>
-                <span>{f}</span>
+            {notes.map((n, i) => (
+              <li
+                key={i}
+                className="flex gap-2.5 text-[15px] leading-relaxed"
+                style={{ color: "var(--ink-2)" }}
+              >
+                <span aria-hidden="true" style={{ color: "var(--muted)" }}>·</span>
+                <span>{n}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
     </article>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="eyebrow">{label}</div>
+      <div className="mt-1 text-[15px] font-semibold leading-snug">{children}</div>
+    </div>
+  );
+}
+
+/** Heat as a shape as well as a word — colour is never the only signal. */
+function Pips({ level }: { level: number }) {
+  const n = Math.min(5, Math.max(0, Math.round(Number(level) || 0)));
+  return (
+    <span className="inline-flex gap-1" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className="inline-block h-1.5 w-3 rounded-full"
+          style={{ background: i < n ? "var(--ink-2)" : "var(--line-2)" }}
+        />
+      ))}
+    </span>
   );
 }
