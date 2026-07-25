@@ -103,6 +103,9 @@ export interface SeedGuest {
   name_zh?: string;
   language: "en" | "zh";
   facts: string[];
+  /** The same facts an owner would read in Chinese. The language toggle is a
+   *  headline feature; leaving prose in English would give the game away. */
+  facts_zh: string[];
 }
 
 export const GUESTS: SeedGuest[] = [
@@ -118,6 +121,14 @@ export const GUESTS: SeedGuest[] = [
       "Mei Lin sent back a dish in March for being too sweet; she now avoids sweet-glazed dishes.",
       "Mei Lin speaks English on the phone but reads the Chinese menu.",
     ],
+    facts_zh: [
+      "美琳的女兒對花生嚴重過敏，不能吃任何用花生油煮的東西。",
+      "美琳通常訂四個人的份量，其中一位是小孩。",
+      "美琳習慣自取，通常會比說好的時間晚十分鐘到。",
+      "美琳喜歡酸和麻的味道，不喜歡甜的。",
+      "美琳三月退過一道菜，嫌太甜；之後就不點甜味的菜了。",
+      "美琳電話裡說英文，但看中文菜單。",
+    ],
   },
   {
     phone: "+14155550188",
@@ -131,6 +142,13 @@ export const GUESTS: SeedGuest[] = [
       "Mrs Wong always collects in person and pays cash.",
       "Mrs Wong has been a Golden Dragon regular for eleven years.",
     ],
+    facts_zh: [
+      "王太太每次都點一樣的：擔擔麵，不要香菜，多加醋。",
+      "王太太每隔一個星期五、大約晚上六點四十打電話來。",
+      "王太太電話裡說普通話，喜歡別人用中文跟她打招呼。",
+      "王太太都是本人來取餐，付現金。",
+      "王太太是金龍十一年的老熟客。",
+    ],
   },
   {
     phone: "+14155550175",
@@ -141,6 +159,12 @@ export const GUESTS: SeedGuest[] = [
       "Danny Ortiz is vegetarian on weekdays but eats meat at weekends.",
       "Danny Ortiz likes very high heat and always asks for the spiciest option.",
       "Danny Ortiz orders on his way home from work, usually about 7pm on a Tuesday.",
+    ],
+    facts_zh: [
+      "丹尼對貝類和蝦過敏，包括蝦米和蝦醬。",
+      "丹尼平日吃素，週末才吃肉。",
+      "丹尼喜歡很辣，每次都要最辣的。",
+      "丹尼下班回家路上訂餐，通常是星期二晚上七點左右。",
     ],
   },
 ];
