@@ -73,10 +73,24 @@ const CROSS_CONTACT: Partial<Record<Station, Allergen[]>> = {
   steam: ["shrimp"],                   // shared steamer baskets and broth pots
 };
 
-function doubtIsEarned(item: MenuItem, a: Allergen, hasStaleNegative: boolean): boolean {
-  if (hasStaleNegative) return true;
-  if (item.hidden_allergen_note) return true;
-  return (CROSS_CONTACT[item.station] ?? []).includes(a);
+function doubtIsEarned(
+  item: MenuItem, a: Allergen, hasStaleNegative: boolean, staleDate: string | null
+): string | null {
+  if (hasStaleNegative) {
+    return staleDate
+      ? `the last time anyone checked was ${staleDate}, which is over ${STALE_DAYS} days ago`
+      : `someone checked once, but not recently`;
+  }
+  if (item.hidden_allergen_note) return `this dish ${item.hidden_allergen_note}`;
+  if ((CROSS_CONTACT[item.station] ?? []).includes(a)) {
+    const why: Partial<Record<Station, string>> = {
+      fry: "it comes out of the same fryer as the dishes that do",
+      wok: "it shares a wok and a sauce station with dishes that do",
+      steam: "it shares steamer baskets and broth pots with dishes that do",
+    };
+    return why[item.station] ?? "the station it is cooked on carries a risk";
+  }
+  return null;
 }
 
 export interface Hazard {
@@ -211,6 +225,7 @@ export async function guardianCheck(args: {
 
   const hazards: Hazard[] = [];
   const unconfirmed: Allergen[] = [];
+  const doubts = new Map<Allergen, string>();
 
   for (const a of restricted) {
     // H1: declared ingredients decide presence — not the dish's name.
@@ -250,8 +265,10 @@ export async function guardianCheck(args: {
     if (negative.length && negLast && daysSince(negLast) <= STALE_DAYS) continue;
     const staleNegative = negative.length > 0;
 
-    // Nobody has asked. Only say so when there is a real reason to wonder.
-    if (doubtIsEarned(item, a, staleNegative)) unconfirmed.push(a);
+    // Nobody has asked. Only say so when there is a real reason to wonder —
+    // and when there is, say what the reason actually is.
+    const why = doubtIsEarned(item, a, staleNegative, negLast);
+    if (why) { unconfirmed.push(a); doubts.set(a, why); }
   }
 
   if (hazards.length) {
@@ -294,8 +311,8 @@ export async function guardianCheck(args: {
       verdict: "unconfirmed", sku: item.sku, nameEn: item.name_en, nameZh: item.name_zh,
       restricted, hazards: [], searches,
       say:
-        `Nobody has confirmed whether the ${item.name_en} is safe for ${label(a)} here recently. ` +
-        `I'm not going to tell you it's safe — ask the counter: ${zhPhrase(a)} — and I'll remember the answer for everyone after you.`,
+        `I can't vouch for the ${item.name_en} on ${label(a)} — ${doubts.get(a) ?? "nobody has checked recently"}. ` +
+        `I'm not going to tell you it's safe. Ask the counter: ${zhPhrase(a)} — and I'll remember the answer for everyone after you.`,
     };
   }
 
