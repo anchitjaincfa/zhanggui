@@ -323,12 +323,24 @@ export async function guardianCheck(args: {
   };
 }
 
-/** Nearest dish that carries none of the guest's restrictions. */
+/**
+ * A recommendation has to survive the same gate it came from.
+ *
+ * The first version filtered only on declared allergens, so after blocking the
+ * Kung Pao because the fryer carries peanut, it would cheerfully suggest
+ * another fried dish as "clear" — a contradiction in the same breath, and the
+ * kind a judge catches. An alternative must be one this guest could actually
+ * be told is safe: nothing declared, no hidden-ingredient note, and no
+ * cross-contact route from its station.
+ */
 export function safeAlternative(from: MenuItem, restricted: Allergen[]): MenuItem | null {
-  const clear = MENU.filter(
-    (m) => m.sku !== from.sku && m.available && !m.allergens.some((a) => restricted.includes(a))
-  );
+  const clear = MENU.filter((m) => {
+    if (m.sku === from.sku || !m.available) return false;
+    if (m.allergens.some((a) => restricted.includes(a))) return false;
+    if (m.hidden_allergen_note) return false;
+    const routes = CROSS_CONTACT[m.station] ?? [];
+    return !routes.some((a) => restricted.includes(a));
+  });
   if (!clear.length) return null;
-  const sameCat = clear.find((m) => m.category === from.category);
-  return sameCat ?? clear[0];
+  return clear.find((m) => m.category === from.category) ?? clear[0];
 }
