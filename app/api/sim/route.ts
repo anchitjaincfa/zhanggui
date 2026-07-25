@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   try { body = (await req.json()) as Body; } catch { /* empty body is fine */ }
 
   try {
-    if (body.reset) {
+    if (body.reset && !body.scenario) {
       await resetAll();
       return NextResponse.json({ ok: true, reset: true });
     }

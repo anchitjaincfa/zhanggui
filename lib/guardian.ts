@@ -43,8 +43,10 @@ const IMPLIES: Partial<Record<Allergen, Allergen[]>> = {
   tree_nut: [],
 };
 
+// A bare "no" is not an allergy cue — "no cilantro" is a preference, and it
+// used to drag in whatever allergen happened to appear as a substring.
 const RESTRICTION_CUES =
-  /\ballerg|anaphyla|intoleran|avoid|cannot eat|can't eat|cant eat|must not eat|no\b|free from|sensitiv/i;
+  /\ballerg|anaphyla|intoleran|\bavoid|cannot eat|can'?t eat|must not eat|\bfree from|sensitiv|\bno (?:peanut|shellfish|shrimp|gluten|dairy|sesame|soy|egg|nut|fish)/i;
 
 // "does not contain", "no peanut", "peanut-free", "separate wok"
 const NEGATION =
@@ -151,9 +153,15 @@ const zhPhrase = (a: Allergen): string =>
 
 const label = (a: Allergen) => a.replace(/_/g, " ");
 
+/** Word-boundary match. Plain substring turned "Peggy" into an egg allergy
+ *  and "Soyoung" into a soy allergy — both real, both reproducible. */
 const mentions = (text: string, a: Allergen) => {
   const t = text.toLowerCase();
-  return SYNONYMS[a].some((s) => t.includes(s.toLowerCase()));
+  return SYNONYMS[a].some((syn) => {
+    const s = syn.toLowerCase();
+    if (/[\u4e00-\u9fff]/.test(s)) return t.includes(s); // CJK has no word breaks
+    return new RegExp(`(?:^|[^a-z])${s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:[^a-z]|$)`, "i").test(t);
+  });
 };
 
 /** Does this text refer to the dish at all? sku, English name, or Chinese name. */
@@ -211,9 +219,21 @@ export async function guardianCheck(args: {
   searches.push({ scope: "guest personal", query: guestQ, rows: guestRes.data.length });
   searches.push({ scope: "restaurant allergen group", query: kitchenQ, rows: kitchenRes.data.length });
 
+  // If we could not read the guest's ledger, we do not get to say "allow".
+  const lookupFailed = Boolean(guestRes.failed) || Boolean(kitchenRes.failed);
   const restricted = args.restrictionsHint?.length
     ? args.restrictionsHint
     : extractRestrictions(guestRes.data);
+
+  if (lookupFailed && !args.restrictionsHint?.length) {
+    return {
+      verdict: "unconfirmed", sku: item.sku, nameEn: item.name_en, nameZh: item.name_zh,
+      restricted, hazards: [], searches,
+      say:
+        `I can't reach the guest's record right now, so I'm not going to tell you the ` +
+        `${item.name_en} is safe. Ask at the counter before you order it.`,
+    };
+  }
 
   if (!restricted.length) {
     return {

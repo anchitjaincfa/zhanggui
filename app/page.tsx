@@ -37,6 +37,8 @@ export default function Console() {
   const [running, setRunning] = useState<Scenario | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<GuardianRow | null>(null);
+  const activeCall = useRef<string | null>(null);
+  const [autoplay, setAutoplay] = useState(true);
   // Floor mode strips the demo scaffolding so the console reads as the product
   // a restaurant would actually run, not a pitch. ?mode=floor or the F key.
   const [floor, setFloor] = useState(false);
@@ -143,13 +145,32 @@ export default function Console() {
       const json: unknown = await res.json().catch(() => null);
       const id =
         isRecord(json) && typeof json.callId === "string" ? json.callId : null;
-      if (id) setCallId(id);
+      if (id) { setCallId(id); activeCall.current = id; }
       setEpoch((e) => e + 1);
       setNote(null);
     } catch {
       setNote("sim unreachable — check /api/sim");
     } finally {
       setBusy(false);
+    }
+  }, []);
+
+  /** Advance one beat. Returns true while the scenario still has beats left. */
+  const step = useCallback(async (): Promise<boolean> => {
+    const id = activeCall.current;
+    if (!id) return false;
+    try {
+      const res = await fetch("/api/sim", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ callId: id, step: true }),
+      });
+      const json: unknown = await res.json().catch(() => null);
+      setEpoch((e) => e + 1);
+      if (isRecord(json) && json.done === true) { activeCall.current = null; return false; }
+      return true;
+    } catch {
+      return false;
     }
   }, []);
 
@@ -188,7 +209,9 @@ export default function Console() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "1") void runScenario("mei");
+      if (e.key === " ") { e.preventDefault(); setAutoplay((v) => !v); }
+      else if (e.key === "n" || e.key === "N") void step();
+      else if (e.key === "1") void runScenario("mei");
       else if (e.key === "2") void runScenario("wong");
       else if (e.key === "3") void runScenario("danny");
       else if (e.key === "r" || e.key === "R") reset();
@@ -196,7 +219,7 @@ export default function Console() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [runScenario, reset, seed]);
+  }, [runScenario, reset, seed, step]);
 
   return (
     <main className="flex min-h-dvh flex-col lg:h-dvh lg:min-h-[700px] lg:overflow-hidden">

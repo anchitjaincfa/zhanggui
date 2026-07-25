@@ -36,6 +36,9 @@ export interface Memory {
 export interface SearchResult {
   data: Memory[];
   context?: string | null;
+  /** True when the lookup itself failed. Absence of data is NOT absence of
+   *  restrictions — Guardian must fail closed rather than allow. */
+  failed?: boolean;
 }
 
 interface Res<T> { ok: boolean; status: number; body: T }
@@ -74,7 +77,7 @@ export async function search(opts: SearchOpts): Promise<SearchResult> {
       ...(opts.include ? { include: opts.include } : {}),
     }),
   });
-  if (!r.ok) return { data: [] };
+  if (!r.ok) return { data: [], failed: true };
   return { data: r.body?.data ?? [], context: r.body?.context ?? null };
 }
 

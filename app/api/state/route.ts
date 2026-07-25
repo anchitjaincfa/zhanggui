@@ -9,7 +9,7 @@ import { SCENARIOS } from "@/lib/scenarios";
 
 export const dynamic = "force-dynamic";
 
-const d = <T,>(e: EventRow) => e.detail as T;
+const d = <T,>(e: EventRow) => (e.detail && typeof e.detail === "object" ? e.detail : {}) as T;
 
 const EMPTY = {
   call: {

@@ -32,8 +32,14 @@ export async function POST(req: Request) {
     const sku = args.sku ? String(args.sku) : "";
     const query = args.query ? String(args.query) : "";
     const qty = Number(args.qty ?? 1) || 1;
-    const phoneRaw = args.phone ? String(args.phone) : "";
-    const phone = phoneRaw ? (phoneRaw.startsWith("+") ? phoneRaw : `+${phoneRaw.replace(/\D/g, "")}`) : null;
+    // "unknown" used to normalise to a bare "+", which matched nothing and
+    // silently turned every caller into a stranger with no restrictions.
+    const phoneRaw = args.phone ? String(args.phone).trim() : "";
+    const digits = phoneRaw.replace(/\D/g, "");
+    const phone =
+      /^(unknown|null|undefined|none|)$/i.test(phoneRaw) || digits.length < 10
+        ? null
+        : `+${digits}`;
 
     const vapiCallId = String(
       (inner.callId as string) ??
