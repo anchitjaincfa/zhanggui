@@ -5,9 +5,10 @@
 // would actually present itself.
 //
 // Photography is Creative Commons (Openverse), credited in the footer. Only
-// five dishes have a genuine match, so the photos live in their own signature
-// strip rather than inline in the menu — a photo beside the wrong dish is
-// worse than no photo, and a half-photographed grid reads as unfinished.
+// three dishes have a photograph that is genuinely of that dish, so the photos
+// live in their own signature strip rather than inline in the menu — a photo
+// beside the wrong dish is worse than no photo, and a half-photographed grid
+// reads as unfinished.
 //
 // The phone number is the point of the page. It is the largest thing after the
 // name, and it is a tel: link, so a judge can call it straight off the screen.
@@ -17,12 +18,17 @@ import { MENU, RESTAURANT } from "@/data/restaurant";
 import credits from "@/data/photo-credits.json";
 
 // Which dish photo sits with which sku.
+//
+// Every one of these was opened and looked at before it was allowed on the
+// page, and two did not survive: the "green beans" photograph was actually
+// chicken noodles in a takeout box carrying a DIFFERENT restaurant's logo, and
+// the wontons shot had a food blog's watermark burned across it. Three real
+// photographs beat five where two are lies — and on a page that also makes
+// allergen claims, a mislabelled dish is the one mistake nobody would forgive.
 const SHOT: Record<string, string> = {
   kung_pao_chicken: "/img/kung_pao.jpg",
   dan_dan_noodles: "/img/dan_dan.jpg",
   mapo_tofu: "/img/mapo_tofu.jpg",
-  hong_you_chao_shou: "/img/wonton.jpg",
-  gan_bian_si_ji_dou: "/img/greens.jpg",
 };
 
 export const metadata: Metadata = {
@@ -180,7 +186,7 @@ export default function GoldenDragonSite() {
           </div>
         </div>
         <p className="gd-credit">
-          Photographs by Bernt Rostad · jules:stonesoup · Andrea_Nguyen · roland · insatiablemunch · Thank You (23 Millions+) views — Creative Commons BY, via Openverse.
+          Photographs by Bernt Rostad · jules:stonesoup · Andrea_Nguyen · roland — Creative Commons BY, via Openverse.
         </p>
         <p className="gd-colophon">
           {RESTAURANT.name_zh} {RESTAURANT.name} · Sichuan cooking since 2014
@@ -224,7 +230,7 @@ export default function GoldenDragonSite() {
         .gd-signature { padding: clamp(2.6rem, 6vw, 4rem) 0 0; }
         .gd-sig-list {
           list-style: none; margin: 1.8rem 0 0; padding: 0; display: grid; gap: 1.4rem;
-          grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
         }
         .gd-sig img {
           width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block;
@@ -234,7 +240,7 @@ export default function GoldenDragonSite() {
         .gd-sig-en { margin: .1rem 0 0; font-size: .88rem; color: var(--ink-2); }
         .gd-credit {
           text-align: center; margin: 2.2rem auto 0; max-width: 46rem;
-          font-size: .72rem; line-height: 1.6; color: #9a8e7e;
+          font-size: .72rem; line-height: 1.6; color: #6b6055;
         }
         .gd-hero::after {
           content: ""; position: absolute; inset: 0;
@@ -244,7 +250,9 @@ export default function GoldenDragonSite() {
         }
         .gd-eyebrow {
           font-size: .72rem; letter-spacing: .34em; font-weight: 700;
-          color: var(--gold); margin: 0 0 1.6rem;
+          /* Gold small-text on the red hero measures ~2.4:1. Paper clears 4.5:1;
+             the gold stays on the large mark, where size carries it. */
+          color: var(--paper); opacity: .82; margin: 0 0 1.6rem;
         }
         .gd-mark {
           font-size: clamp(5rem, 19vw, 11rem); line-height: .82; margin: 0;
@@ -254,7 +262,7 @@ export default function GoldenDragonSite() {
         .gd-name {
           margin: 1.1rem 0 0; font-size: clamp(1.15rem, 3.4vw, 1.7rem);
           letter-spacing: .42em; text-transform: uppercase; font-weight: 600;
-          color: var(--gold);
+          color: var(--paper);
         }
         .gd-lede {
           margin: 1.6rem auto 0; max-width: 34rem; font-size: 1.06rem;
@@ -336,7 +344,7 @@ export default function GoldenDragonSite() {
           font-weight: 700; color: var(--lacquer) !important; margin-bottom: .6rem !important; }
         .gd-foot-phone { font-size: 1.3rem; font-weight: 800; color: var(--ink); text-decoration: none;
           font-variant-numeric: tabular-nums; display: inline-block; margin-bottom: .3rem; }
-        .gd-colophon { text-align: center; margin: 2.6rem 0 0; font-size: .8rem; letter-spacing: .1em; color: #8b7f70; }
+        .gd-colophon { text-align: center; margin: 2.6rem 0 0; font-size: .8rem; letter-spacing: .1em; color: #6b6055; }
 
         .gd a:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
         @media (prefers-reduced-motion: reduce) { .gd * { transition: none !important; } }
