@@ -1,0 +1,119 @@
+/* MenuSifu's own palette, taken from their site's --theme-color.
+ *
+ * The one deliberate departure: their amber #FFB600 is the brand, so it is
+ * never used for "caution". If amber meant both "MenuSifu" and "be careful",
+ * an owner glancing at the screen could not tell which. Safety therefore gets
+ * its own three colours — red to stop, blue to ask, green to serve — and the
+ * amber is reserved for brand and the active page.
+ *
+ * Light is the primary theme: restaurants are bright rooms and POS screens are
+ * bright. Dark is a real second design for evening service, not an inversion.
+ */
+
+:root {
+  --ms-amber:      #ffb600;   /* MenuSifu brand */
+  --ms-amber-deep: #b87f00;   /* amber that survives on white text */
+  --ms-blue:       #0050bd;
+  --ms-red:        #d92d20;
+  --ms-green:      #067647;
+
+  --paper:    #faf7f3;        /* their warm off-white */
+  --card:     #ffffff;
+  --sunk:     #f5f2ec;
+  --ink:      #0a0a0a;
+  --ink-2:    #3d3d3d;
+  --muted:    #6f6f6f;        /* their grey */
+  --line:     #e6e1d8;
+  --line-2:   #d8d2c7;
+
+  --stop-bg:  #fef3f2;  --stop-line: #fecdc9;  --stop-ink: #b42318;
+  --ask-bg:   #eff6ff;  --ask-line:  #b9d4fe;  --ask-ink:  #0050bd;
+  --safe-bg:  #ecfdf3;  --safe-line: #a9e5c3;  --safe-ink: #067647;
+
+  --r: 10px;
+  --shadow: 0 1px 2px rgba(10,10,10,.05), 0 1px 3px rgba(10,10,10,.04);
+  --shadow-lift: 0 4px 12px rgba(10,10,10,.07), 0 1px 3px rgba(10,10,10,.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #121110; --card: #1a1918; --sunk: #201e1c;
+    --ink: #f7f4ef; --ink-2: #d5cfc6; --muted: #948d83;
+    --line: #2e2b28; --line-2: #3b3733;
+    --stop-bg: #2a1614; --stop-line: #5c2b26; --stop-ink: #ff9c92;
+    --ask-bg:  #101c2e; --ask-line:  #1f3d66; --ask-ink:  #8cc0ff;
+    --safe-bg: #0f2018; --safe-line: #1f4633; --safe-ink: #6ee7a8;
+    --shadow: none; --shadow-lift: 0 4px 14px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121110; --card: #1a1918; --sunk: #201e1c;
+  --ink: #f7f4ef; --ink-2: #d5cfc6; --muted: #948d83;
+  --line: #2e2b28; --line-2: #3b3733;
+  --stop-bg: #2a1614; --stop-line: #5c2b26; --stop-ink: #ff9c92;
+  --ask-bg:  #101c2e; --ask-line:  #1f3d66; --ask-ink:  #8cc0ff;
+  --safe-bg: #0f2018; --safe-line: #1f4633; --safe-ink: #6ee7a8;
+  --shadow: none; --shadow-lift: 0 4px 14px rgba(0,0,0,.4);
+}
+:root[data-theme="light"] {
+  --paper: #faf7f3; --card: #ffffff; --sunk: #f5f2ec;
+  --ink: #0a0a0a; --ink-2: #3d3d3d; --muted: #6f6f6f;
+  --line: #e6e1d8; --line-2: #d8d2c7;
+  --stop-bg: #fef3f2; --stop-line: #fecdc9; --stop-ink: #b42318;
+  --ask-bg: #eff6ff; --ask-line: #b9d4fe; --ask-ink: #0050bd;
+  --safe-bg: #ecfdf3; --safe-line: #a9e5c3; --safe-ink: #067647;
+}
+
+.rest {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  min-height: 100vh;
+}
+.rest .num { font-variant-numeric: tabular-nums; }
+
+/* Cards */
+.r-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.r-sunk { background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r); }
+
+/* Status chips — colour is never the only signal; each carries a word. */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; line-height: 1;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.chip-stop { background: var(--stop-bg); border-color: var(--stop-line); color: var(--stop-ink); }
+.chip-ask  { background: var(--ask-bg);  border-color: var(--ask-line);  color: var(--ask-ink); }
+.chip-safe { background: var(--safe-bg); border-color: var(--safe-line); color: var(--safe-ink); }
+.chip-flat { background: var(--sunk);    border-color: var(--line);      color: var(--muted); }
+
+/* Severity stripe — the shape that lets a card read from across the kitchen */
+.stripe { border-left: 5px solid var(--line); }
+.stripe-stop { border-left-color: var(--ms-red); }
+.stripe-ask  { border-left-color: var(--ms-blue); }
+.stripe-safe { border-left-color: var(--ms-green); }
+
+.eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.rest button:focus-visible, .rest a:focus-visible {
+  outline: 2px solid var(--ms-blue); outline-offset: 2px; border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest *, .rest *::before, .rest *::after {
+    animation-duration: .001ms !important; transition-duration: .001ms !important;
+  }
+}
+
+@keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.live-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
