@@ -100,7 +100,11 @@ export async function POST(req: Request) {
       case "birthday":
       case "dob": {
         const spoken = query || String(args.birthday ?? args.dob ?? args.date ?? "");
-        const nameHint = args.name ? String(args.name) : undefined;
+        // The dashboard tool schema only carries action/sku/phone/query, so a
+        // name arrives inside `query` alongside the date ("10 Jan 1994, Anchit")
+        // rather than in its own field. Feed the whole utterance in as the hint:
+        // the date parser ignores the name, and the name matcher ignores the date.
+        const nameHint = args.name ? String(args.name) : spoken || undefined;
         const out = identifyByBirthday(spoken, nameHint);
 
         if (out.status === "unparsed") {
