@@ -233,6 +233,22 @@ export async function guardianCheck(args: {
   }
 
   if (hazards.length) {
+    // shellfish implies shrimp implies shrimp_paste, so one dish can raise the
+    // same underlying hazard several times. Keep the best-evidenced one first
+    // and drop family duplicates that carry no record of their own.
+    hazards.sort((x, y) =>
+      Number(Boolean(y.lastConfirmed)) - Number(Boolean(x.lastConfirmed)) ||
+      y.confirmations - x.confirmations
+    );
+    const seenEvidence = new Set<string>();
+    const deduped = hazards.filter((h) => {
+      const key = h.evidence[0] ?? h.allergen;
+      if (h.lastConfirmed === null && seenEvidence.has(key)) return false;
+      seenEvidence.add(key);
+      return true;
+    });
+    hazards.length = 0;
+    hazards.push(...deduped);
     const h = hazards[0];
     const safe = safeAlternative(item, restricted);
     const when = h.lastConfirmed ? ` on ${h.lastConfirmed}` : "";

@@ -221,7 +221,10 @@ export default function Console() {
         </div>
 
         <div className="flex min-h-0 flex-col gap-2.5 lg:col-span-4">
-          <GuestCard guest={state.guestCard} className="shrink-0" />
+          <GuestCard
+            guest={state.guestCard}
+            className="shrink-0 lg:max-h-[46%]"
+          />
           <GhostCrm
             memory={state.memory}
             className="min-h-[300px] lg:min-h-0 lg:flex-1"
@@ -230,7 +233,7 @@ export default function Console() {
       </div>
 
       {/* dock */}
-      <div className="grid shrink-0 grid-cols-1 gap-2.5 px-2.5 pb-2.5 lg:h-[196px] lg:grid-cols-12">
+      <div className="grid shrink-0 grid-cols-1 gap-2.5 px-2.5 pb-2.5 lg:h-[204px] lg:grid-cols-12">
         <SecretMenu
           items={state.secretMenu}
           className="min-h-[150px] lg:col-span-4 lg:min-h-0"
