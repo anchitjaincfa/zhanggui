@@ -25,7 +25,12 @@ export const ALLERGENS: Allergen[] = [
 /** How an allergen may appear in free text. */
 const SYNONYMS: Record<Allergen, string[]> = {
   peanut: ["peanut", "groundnut", "花生"],
-  shellfish: ["shellfish", "crustacean", "crab", "lobster", "scallop", "clam", "oyster", "貝", "海鲜", "海鮮"],
+  // "seafood" belongs here even though it is looser than shellfish. It is how
+  // most people actually say it on the phone, and it was returning NO
+  // restrictions at all — the gate's worst possible answer. Treating it as the
+  // shellfish family over-restricts a fish-only guest by a dish or two; the
+  // alternative was silently serving shrimp to someone who told us not to.
+  shellfish: ["shellfish", "seafood", "crustacean", "crab", "lobster", "scallop", "clam", "oyster", "貝", "海鲜", "海鮮"],
   shrimp: ["shrimp", "prawn", "dried shrimp", "虾", "蝦"],
   fish_sauce: ["fish sauce", "鱼露", "魚露"],
   shrimp_paste: ["shrimp paste", "dried shrimp paste", "虾酱", "蝦醬"],
