@@ -4,9 +4,10 @@
 // the software's. Lacquer red and gold on warm paper, the way a Sichuan house
 // would actually present itself.
 //
-// No photography — none exists for a restaurant that doesn't. Rather than fake
-// it with stock, the Chinese characters carry the visual weight, which is how
-// the better Chinatown menus have always worked.
+// Photography is Creative Commons (Openverse), credited in the footer. Only
+// five dishes have a genuine match, so the photos live in their own signature
+// strip rather than inline in the menu — a photo beside the wrong dish is
+// worse than no photo, and a half-photographed grid reads as unfinished.
 //
 // The phone number is the point of the page. It is the largest thing after the
 // name, and it is a tel: link, so a judge can call it straight off the screen.
@@ -70,6 +71,23 @@ export default function GoldenDragonSite() {
       </header>
 
       {/* ── the menu ────────────────────────────────────────── */}
+      <section className="gd-signature" aria-label="Signature dishes">
+        <div className="gd-wrap">
+          <h2 className="gd-h2">
+            招牌菜 <span>What we are known for</span>
+          </h2>
+          <ul className="gd-sig-list">
+            {MENU.filter((m) => SHOT[m.sku]).map((m) => (
+              <li key={m.sku} className="gd-sig">
+                <img src={SHOT[m.sku]} alt={`${m.name_en} — ${m.name_zh}`} loading="lazy" />
+                <p className="gd-sig-zh">{m.name_zh}</p>
+                <p className="gd-sig-en">{m.name_en}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       <main className="gd-wrap gd-main">
         <section>
           <h2 className="gd-h2">
@@ -82,9 +100,6 @@ export default function GoldenDragonSite() {
               <ul className="gd-list">
                 {group.items.map((m) => (
                   <li key={m.sku} className="gd-item">
-                    {SHOT[m.sku] && (
-                      <img className="gd-shot" src={SHOT[m.sku]} alt={`${m.name_en} at Golden Dragon`} loading="lazy" />
-                    )}
                     <div className="gd-item-head">
                       <span className="gd-zh">{m.name_zh}</span>
                       <span className="gd-dots" aria-hidden="true" />
@@ -206,11 +221,17 @@ export default function GoldenDragonSite() {
           mix-blend-mode: luminosity;
         }
         .gd-wrap { position: relative; z-index: 1; }
-        .gd-shot {
-          width: 100%; aspect-ratio: 3 / 2; object-fit: cover;
-          border-radius: 4px; margin-bottom: .85rem; display: block;
-          background: var(--paper-2);
+        .gd-signature { padding: clamp(2.6rem, 6vw, 4rem) 0 0; }
+        .gd-sig-list {
+          list-style: none; margin: 1.8rem 0 0; padding: 0; display: grid; gap: 1.4rem;
+          grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
         }
+        .gd-sig img {
+          width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block;
+          border-radius: 5px; background: var(--paper-2);
+        }
+        .gd-sig-zh { margin: .7rem 0 0; font-size: 1.2rem; font-weight: 700; }
+        .gd-sig-en { margin: .1rem 0 0; font-size: .88rem; color: var(--ink-2); }
         .gd-credit {
           text-align: center; margin: 2.2rem auto 0; max-width: 46rem;
           font-size: .72rem; line-height: 1.6; color: #9a8e7e;
