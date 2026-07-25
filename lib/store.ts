@@ -2,18 +2,21 @@
 // Memory lives in XTrace; this is only the ephemeral theatre of one call —
 // transcript lines, tool calls, what changed on which surface.
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
-let client: SupabaseClient | null = null;
+// The generic defaults to the `public` schema, so the client type is inferred
+// from the call rather than annotated.
+const makeClient = () =>
+  createClient(
+    process.env.SUPABASE_URL || "",
+    process.env.SUPABASE_KEY || "",
+    { db: { schema: "zhanggui" }, auth: { persistSession: false } }
+  );
 
-export function db(): SupabaseClient {
-  if (!client) {
-    client = createClient(
-      process.env.SUPABASE_URL || "",
-      process.env.SUPABASE_KEY || "",
-      { db: { schema: "zhanggui" }, auth: { persistSession: false } }
-    );
-  }
+let client: ReturnType<typeof makeClient> | null = null;
+
+export function db() {
+  if (!client) client = makeClient();
   return client;
 }
 
