@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionReceipt } from "@/components/ActionReceipt";
+import CallButton from "@/components/CallButton";
 import { Controls } from "@/components/Controls";
 import { GhostCrm } from "@/components/GhostCrm";
 import { GuardianOverlay, GuardianPanel } from "@/components/Guardian";
@@ -240,8 +241,11 @@ export default function Console() {
         />
         <ActionReceipt
           rows={state.receipt}
-          className="min-h-[150px] lg:col-span-5 lg:min-h-0"
+          className="min-h-[150px] lg:col-span-3 lg:min-h-0"
         />
+        <div className="lg:col-span-2">
+          <CallButton />
+        </div>
         <Controls
           onScenario={(s) => void runScenario(s)}
           onReset={reset}
