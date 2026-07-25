@@ -14,7 +14,7 @@
 //        parsed explicitly and treated as exculpatory, not incriminating.
 
 import { search, ALLERGEN_GROUP } from "./xtrace";
-import { bySku, MENU, CONFIRMATIONS, type Allergen, type MenuItem } from "@/data/restaurant";
+import { bySku, MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
 
 export const ALLERGENS: Allergen[] = [
   "peanut", "shellfish", "shrimp", "fish_sauce", "shrimp_paste",
@@ -53,6 +53,31 @@ const NEGATION =
 const DATE_RE = /\b(20\d{2}-\d{2}-\d{2})\b/g;
 
 const STALE_DAYS = 90;
+
+/**
+ * Absence of evidence is not, by itself, doubt.
+ *
+ * The menu's declared allergens are the restaurant's own statement of what is
+ * IN a dish, and we treat that as authoritative. Escalating every unasked
+ * question to "unconfirmed" made 19 of 20 dishes suspect, which is the same as
+ * flagging none of them — a gate that cries wolf gets ignored, and on stage it
+ * reads as broken rather than careful.
+ *
+ * So doubt has to be earned. It is earned when the dish is known to hide things
+ * a menu would not list, when someone checked but did so long ago, or when the
+ * cooking station itself carries a plausible cross-contact route.
+ */
+const CROSS_CONTACT: Partial<Record<Station, Allergen[]>> = {
+  fry: ["peanut", "gluten"],          // shared fryer oil and shared breading
+  wok: ["shrimp_paste", "fish_sauce"], // shared wok, shared sauce caddy
+  steam: ["shrimp"],                   // shared steamer baskets and broth pots
+};
+
+function doubtIsEarned(item: MenuItem, a: Allergen, hasStaleNegative: boolean): boolean {
+  if (hasStaleNegative) return true;
+  if (item.hidden_allergen_note) return true;
+  return (CROSS_CONTACT[item.station] ?? []).includes(a);
+}
 
 export interface Hazard {
   allergen: Allergen;
@@ -221,15 +246,12 @@ export async function guardianCheck(args: {
     }
 
     // Cleared by a dated negative confirmation — but only if it is fresh.
-    if (negative.length) {
-      const last = ledger(item.sku, a, false).last;
-      if (last && daysSince(last) <= STALE_DAYS) continue; // genuinely allow
-      unconfirmed.push(a);
-      continue;
-    }
+    const negLast = negative.length ? ledger(item.sku, a, false).last : null;
+    if (negative.length && negLast && daysSince(negLast) <= STALE_DAYS) continue;
+    const staleNegative = negative.length > 0;
 
-    // Nobody has ever asked. We do not get to guess.
-    unconfirmed.push(a);
+    // Nobody has asked. Only say so when there is a real reason to wonder.
+    if (doubtIsEarned(item, a, staleNegative)) unconfirmed.push(a);
   }
 
   if (hazards.length) {
