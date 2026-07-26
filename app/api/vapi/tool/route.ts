@@ -118,9 +118,25 @@ export async function POST(req: Request) {
         }
         const card = await doIdentify(ctx);
         if (card) {
+          // Personal memory is scoped to the GUEST, not the restaurant —
+          // XTrace ignores `namespace` on search, so a number's ledger is
+          // visible from either shop. That is right for allergies, which
+          // should follow a person everywhere, and wrong for order history:
+          // a boba shop reading out "your usual is the shui zhu niu" is
+          // another restaurant's business leaking through. So a shop that
+          // does not own this guest gets the safety facts and nothing else.
+          const restrictions = card.restrictions.join(", ") || "nothing recorded";
+          if (!ownRegistry) {
+            return say(
+              `Known guest, but their history belongs to another restaurant — ` +
+              `do NOT mention past orders or preferences. Must avoid: ${restrictions}. ` +
+              `Greet them normally and take the order fresh.`,
+              { known: true, restrictions: card.restrictions }
+            );
+          }
           return say(
             `Known guest: ${card.name ?? card.nameZh}. ` +
-            `Must avoid: ${card.restrictions.join(", ") || "nothing recorded"}. ` +
+            `Must avoid: ${restrictions}. ` +
             card.notes.slice(0, 3).join(" "),
             { known: true }
           );
