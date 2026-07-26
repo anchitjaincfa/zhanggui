@@ -6,10 +6,15 @@
 //
 //   GET /api/guardian?sku=wonton_soup&phone=%2B14155550175
 //   GET /api/guardian?all=1&phone=%2B14155550175      ← every dish at once
+//   GET /api/guardian?all=1&shop=purple_kow&phone=…   ← the boba shop
+//
+// The `shop` parameter is the whole argument for the architecture: the same
+// gate, the same code path, a completely different cuisine. Omit it and you get
+// Golden Dragon, byte-for-byte as before.
 
 import { NextResponse } from "next/server";
 import { guardianCheck } from "@/lib/guardian";
-import { MENU, GUESTS, bySku } from "@/data/restaurant";
+import { shopFromRequest } from "@/lib/shop";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -19,17 +24,19 @@ export async function GET(req: Request) {
   const phone = url.searchParams.get("phone");
   const sku = url.searchParams.get("sku");
   const all = url.searchParams.get("all");
+  const shop = shopFromRequest(req);
+  const menu = shop.menu;
 
   try {
     if (all) {
       // Run every dish for one guest. Concurrency-capped so we don't hammer
       // the memory API with 20 simultaneous searches.
       const out: unknown[] = [];
-      const items = [...MENU];
+      const items = [...menu];
       while (items.length) {
         const batch = items.splice(0, 4);
         const verdicts = await Promise.all(
-          batch.map((m) => guardianCheck({ guestPhone: phone, sku: m.sku }))
+          batch.map((m) => guardianCheck({ guestPhone: phone, sku: m.sku, shop }))
         );
         for (const [i, v] of verdicts.entries()) {
           const item = batch[i];
@@ -39,6 +46,7 @@ export async function GET(req: Request) {
             sku: v.sku,
             nameEn: v.nameEn,
             declared: item.allergens,
+            restricted: v.restricted,
             verdict: v.verdict,
             shouldFlag,
             // The only genuinely dangerous outcome: we said yes to a dish that
@@ -51,6 +59,8 @@ export async function GET(req: Request) {
       }
       const unsafe = out.filter((o) => (o as { UNSAFE: boolean }).UNSAFE);
       return NextResponse.json({
+        shop: shop.slug,
+        restaurant: shop.restaurant.name,
         phone,
         restricted: (out[0] as { restricted?: string[] })?.restricted ?? undefined,
         total: out.length,
@@ -60,16 +70,19 @@ export async function GET(req: Request) {
       });
     }
 
-    if (!sku || !bySku(sku)) {
+    if (!sku || !menu.some((m) => m.sku === sku)) {
       return NextResponse.json({
-        hint: "?sku=<sku>&phone=<E.164>  or  ?all=1&phone=<E.164>",
-        guests: GUESTS.map((g) => ({ name: g.name, phone: g.phone })),
-        skus: MENU.map((m) => ({ sku: m.sku, name: m.name_en, zh: m.name_zh, allergens: m.allergens })),
+        hint: "?sku=<sku>&phone=<E.164>[&shop=purple_kow]  or  ?all=1&phone=<E.164>",
+        shop: shop.slug,
+        restaurant: shop.restaurant.name,
+        shops: ["golden_dragon", "purple_kow"],
+        guests: shop.guests.map((g) => ({ name: g.name, phone: g.phone })),
+        skus: menu.map((m) => ({ sku: m.sku, name: m.name_en, zh: m.name_zh, allergens: m.allergens })),
       });
     }
 
-    const v = await guardianCheck({ guestPhone: phone, sku });
-    return NextResponse.json(v);
+    const v = await guardianCheck({ guestPhone: phone, sku, shop });
+    return NextResponse.json({ shop: shop.slug, ...v });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

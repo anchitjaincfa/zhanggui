@@ -11,7 +11,8 @@
 import { NextResponse } from "next/server";
 import { createCall, findCallByVapiId, updateCall } from "@/lib/store";
 import { doGuardian, doIdentify, doSecretMenu, doAdd, doFinalize, type RunContext } from "@/lib/engine";
-import { MENU, RESTAURANT } from "@/data/restaurant";
+import { RESTAURANT } from "@/data/restaurant";
+import { shopFromRequest } from "@/lib/shop";
 import { resolveItem, didYouMean } from "@/lib/resolve";
 import {
   identifyByPhone, identifyByBirthday, linkPhoneToProfile, describe, greeting, sayBirthday,
@@ -44,6 +45,12 @@ export async function POST(req: Request) {
     const inner = (body.message ?? body) as Record<string, unknown>;
     const args = (inner.arguments ?? inner.parameters ?? inner) as Record<string, unknown>;
 
+    // Which restaurant this number answers for. Vapi's tool URL carries it as
+    // a query string (…/api/vapi/tool?shop=purple_kow), so one deployment can
+    // serve two shops without either one knowing about the other.
+    const shop = shopFromRequest(req);
+    const MENU = shop.menu;
+
     const action = String(args.action ?? "").toLowerCase().trim();
     const sku = args.sku ? String(args.sku) : "";
     const query = args.query ? String(args.query) : "";
@@ -72,7 +79,7 @@ export async function POST(req: Request) {
       (digits ? `web_${digits}` : "web");
     const existing = await findCallByVapiId(vapiCallId);
     const callId = existing?.id ?? (await createCall({ vapiCallId, phone, channel: "phone" }));
-    const ctx: RunContext = { callId, phone: phone ?? existing?.caller_phone ?? null };
+    const ctx: RunContext = { callId, phone: phone ?? existing?.caller_phone ?? null, shop };
 
     // Who this caller turned out to be, on THIS call.
     //
@@ -82,11 +89,17 @@ export async function POST(req: Request) {
     // at the gate as a stranger with no restrictions, and the gate — correctly,
     // given what it was told — allowed the dish. The name is already persisted
     // on the call row, so rehydrate the profile from it before every action.
-    const profile =
-      identifyByPhone(ctx.phone) ??
-      (existing?.guest_name
-        ? PROFILES.find((p) => p.name === existing.guest_name) ?? null
-        : null);
+    // The 22-profile registry belongs to Golden Dragon. A boba shop must not
+    // read a Sichuan restaurant's guest book — same building, different
+    // business, and greeting a stranger by name off another shop's records is
+    // exactly the kind of leak this architecture is supposed to prevent.
+    const ownRegistry = shop.slug === "golden_dragon";
+    const profile = !ownRegistry
+      ? null
+      : identifyByPhone(ctx.phone) ??
+        (existing?.guest_name
+          ? PROFILES.find((p) => p.name === existing.guest_name) ?? null
+          : null);
 
     switch (action) {
       // Caller ID first. It asks the guest for nothing, so it is always worth
