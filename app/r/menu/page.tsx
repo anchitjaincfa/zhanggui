@@ -12,16 +12,22 @@
 // does on the wall. A dish that reads vegetarian but carries shrimp paste is
 // flagged in red before anyone has to scroll.
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Shell, { useT } from "../Shell";
 import "../theme.css";
-import { MENU, type MenuItem } from "@/data/restaurant";
+import { type MenuItem } from "@/data/restaurant";
+import { getShop } from "@/lib/shop";
 import { allergen, station, type Lang } from "@/lib/i18n";
 
 export default function Page() {
   return (
     <Shell title="navMenu" ask="askMenu">
-      <Body />
+      {/* useSearchParams opts the tree into client rendering; without the
+          boundary Next refuses to prerender the route at all. */}
+      <Suspense fallback={null}>
+        <Body />
+      </Suspense>
     </Shell>
   );
 }
@@ -62,7 +68,14 @@ function Body() {
      sees, nothing else — so the button never promises more than it does. */
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
 
-  const dishes = useMemo<MenuItem[]>(() => (Array.isArray(MENU) ? MENU : []), []);
+  // ?shop=purple_kow swaps the whole page to the boba shop. No parameter means
+  // Golden Dragon, exactly as before.
+  const params = useSearchParams();
+  const shop = getShop(params.get("shop"));
+  const dishes = useMemo<MenuItem[]>(
+    () => (Array.isArray(shop.menu) ? shop.menu : []),
+    [shop]
+  );
 
   const categories = useMemo<string[]>(() => {
     const seen: string[] = [];
