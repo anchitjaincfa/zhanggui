@@ -471,3 +471,8 @@ export const PROFILES: Profile[] = [
 
 export const byPhone = (p: string) => PROFILES.find((g) => g.phone === p) ?? null;
 export const byBirthday = (iso: string) => PROFILES.filter((g) => g.birthday === iso);
+
+// Every phone here is in the +1 xxx 555 01xx reserved range, which cannot be
+// dialled, and every birthday is invented. This file is committed to a public
+// repository: a real number paired with a real date of birth is the pair that
+// account-recovery flows ask for, so neither belongs here.
