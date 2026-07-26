@@ -280,14 +280,21 @@ function Dish({
           <p className="eyebrow" style={{ color: "var(--stop-ink)" }}>
             {L("watch", lang)}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="eyebrow" style={{ color: "var(--stop-ink)" }}>{t("contains")}</span>
-            {allergens.map((a) => (
-              <span key={a} className="chip chip-stop text-[15px]">
-                {allergen(a, lang)}
-              </span>
-            ))}
-          </div>
+          {/* A dish can carry a warning without carrying an allergen: the boba
+              shop's plain iced tea has nothing in the recipe but shares a
+              shaker with every milk tea. Printing "Contains" above an empty
+              list read as "Contains: no allergens", which is nonsense on the
+              one page that has to be read literally. */}
+          {allergens.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="eyebrow" style={{ color: "var(--stop-ink)" }}>{t("contains")}</span>
+              {allergens.map((a) => (
+                <span key={a} className="chip chip-stop text-[15px]">
+                  {allergen(a, lang)}
+                </span>
+              ))}
+            </div>
+          )}
           <p className="mt-2 text-[14px] leading-relaxed" style={{ color: "var(--stop-ink)" }}>
             {hidden}
           </p>
