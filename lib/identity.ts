@@ -22,7 +22,7 @@ import { RESTAURANT } from "@/data/restaurant";
 // ── Hearing a date ─────────────────────────────────────────────────────────
 // Speech-to-text hands over dates in whatever shape the speaker used. All of
 // these are the same day and all of them have to parse:
-//   "10 January 1994" · "January tenth, nineteen ninety four" · "1/10/1994"
+//   "17 June 1993" · "June seventeenth, nineteen ninety-three" · "6/17/1993"
 //   "17-jun-93" · "the seventeenth of June nineteen ninety-three" · "1993-06-17"
 
 const MONTHS: Record<string, number> = {
@@ -155,7 +155,7 @@ export function parseBirthday(input: string): string | null {
   const zh = raw.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/);
   if (zh) return `${zh[1]}-${pad(+zh[2])}-${pad(+zh[3])}`;
 
-  // Month name in either order: "10 jan 1994" / "january 10 1994"
+  // Month name in either order: "17 jun 1993" / "june 17 1993"
   const cleaned = raw.replace(/(\d+)(st|nd|rd|th)\b/g, "$1").replace(/[,]/g, " ");
   const monthWord = Object.keys(MONTHS).find((m) =>
     new RegExp(`(?:^|[^a-z一-鿿])${m}(?:[^a-z一-鿿]|$)`).test(cleaned)
@@ -174,7 +174,7 @@ export function parseBirthday(input: string): string | null {
     return null;
   }
 
-  // Numeric US order: 1/10/1994 or 01-10-94
+  // Numeric US order: 6/17/1993 or 06-17-93
   const num = cleaned.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\b/);
   if (num) {
     let [, m, d, y] = num;
