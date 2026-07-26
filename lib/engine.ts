@@ -31,7 +31,7 @@ export async function doIdentify(ctx: RunContext): Promise<GuestCard | null> {
     });
     return null;
   }
-  const card = await guestCard(ctx.phone);
+  const card = await guestCard(ctx.phone, ctx.shop ?? getShop(null));
   if (!card) {
     await emit(ctx.callId, "memory", "New number", {
       source: "caller ID", scope: "personal", type: "fact",

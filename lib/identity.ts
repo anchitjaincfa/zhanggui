@@ -16,6 +16,7 @@
 
 import { PROFILES, byPhone, byBirthday, type Profile } from "@/data/guests";
 import { ingestDetached, search } from "./xtrace";
+import { getShop, scopedUserId, type Shop } from "./shop";
 import { RESTAURANT } from "@/data/restaurant";
 
 // ── Hearing a date ─────────────────────────────────────────────────────────
@@ -252,7 +253,7 @@ export function identifyByBirthday(spoken: string, nameHint?: string): IdentityO
  * Write the new number onto the profile that owns it, so the birthday question
  * is asked exactly once per phone. Detached — a caller never waits on a write.
  */
-export function linkPhoneToProfile(profile: Profile, phone: string): void {
+export function linkPhoneToProfile(profile: Profile, phone: string, shop: Shop = getShop(null)): void {
   if (!phone || phone === profile.phone) return;
   ingestDetached({
     messages: [
@@ -266,7 +267,7 @@ export function linkPhoneToProfile(profile: Profile, phone: string): void {
       },
       { role: "assistant", content: `Linked ${phone} to ${profile.name}.` },
     ],
-    user_id: phone,
+    user_id: scopedUserId(shop, phone),
     conv_id: `link_${profile.id}_${phone.replace(/\D/g, "")}`,
     agent_id: "frontdesk",
     namespace: `rest_${RESTAURANT.id}`,
@@ -296,10 +297,10 @@ export function greeting(p: Profile): string {
 }
 
 /** Cross-check the local registry against what memory holds for this number. */
-export async function memoryFor(phone: string) {
+export async function memoryFor(phone: string, shop: Shop = getShop(null)) {
   const r = await search({
     query: "who is this guest, their preferences, allergies, and order history",
-    user_id: phone,
+    user_id: scopedUserId(shop, phone),
     mode: "retrieve",
   });
   return r;

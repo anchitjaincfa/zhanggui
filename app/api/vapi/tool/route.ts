@@ -209,7 +209,7 @@ export async function POST(req: Request) {
         }
 
         const p = out.profile;
-        if (ctx.phone) linkPhoneToProfile(p, ctx.phone);
+        if (ctx.phone) linkPhoneToProfile(p, ctx.phone, shop);
         await updateCall(callId, { guest_name: p.name, language: p.language, caller_phone: ctx.phone });
         ctx.guest = {
           phone: ctx.phone ?? p.phone, name: p.name, nameZh: p.name_zh, language: p.language,

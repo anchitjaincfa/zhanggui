@@ -106,4 +106,29 @@ export const groupsFor = (shop: Shop) => ({
 export const bySkuIn = (shop: Shop, sku: string): MenuItem | undefined =>
   shop.menu.find((m) => m.sku === sku);
 
+/**
+ * The memory scope for one guest at one restaurant.
+ *
+ * XTrace's personal gate keys on `user_id`, and `namespace` is ignored on
+ * search — verified against the live API — so a bare phone number is a single
+ * global scope that every restaurant can read. That is wrong for a guest book:
+ * a boba shop has no business knowing what someone orders at a Sichuan
+ * restaurant.
+ *
+ * Golden Dragon keeps the bare phone so the profiles already seeded under it
+ * still resolve; every other shop is prefixed. The prefix is the isolation.
+ */
+export const scopedUserId = (shop: Shop, phone: string): string =>
+  shop.slug === DEFAULT_SHOP ? phone : `${shop.slug}:${phone}`;
+
+/**
+ * The one thing that is deliberately NOT scoped.
+ *
+ * An allergy is a fact about a person, not about a restaurant, and a guest who
+ * told one business they carry an EpiPen should not have to tell the next one
+ * before it can hurt them. So safety reads also consult the bare phone scope —
+ * and only ever extract restrictions from it, never history or preferences.
+ */
+export const safetyScopeId = (phone: string): string => phone;
+
 export type { Allergen, MenuItem, Confirmation, SeedGuest };

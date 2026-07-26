@@ -14,7 +14,7 @@
 //        parsed explicitly and treated as exculpatory, not incriminating.
 
 import { search, type SearchResult } from "./xtrace";
-import { getShop, groupsFor, type Shop } from "./shop";
+import { getShop, groupsFor, scopedUserId, safetyScopeId, type Shop } from "./shop";
 import { MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
 
 export const ALLERGENS: Allergen[] = [
@@ -289,15 +289,28 @@ export async function guardianCheck(args: {
   const guestQ = "allergies, dietary restrictions and foods this guest must avoid";
   const kitchenQ = `does ${item.name_en} contain or contact any allergen at this restaurant?`;
 
-  const [guestRes, kitchenRes] = await Promise.all([
-    args.guestPhone
-      ? search({ query: guestQ, user_id: args.guestPhone, mode: "retrieve" })
+  // The guest read is two reads: this restaurant's own record of them, and the
+  // allergy they may have declared at a different one. A gate that only knew
+  // what THIS shop had been told would be safe for regulars and useless for
+  // everyone else.
+  const ownId = args.guestPhone ? scopedUserId(shop, args.guestPhone) : null;
+  const sharedId = args.guestPhone ? safetyScopeId(args.guestPhone) : null;
+
+  const [guestRes, sharedRes, kitchenRes] = await Promise.all([
+    ownId
+      ? search({ query: guestQ, user_id: ownId, mode: "retrieve" })
+      : Promise.resolve<SearchResult>({ data: [] }),
+    sharedId && sharedId !== ownId
+      ? search({ query: guestQ, user_id: sharedId, mode: "retrieve" })
       : Promise.resolve<SearchResult>({ data: [] }),
     allergenGroup
       ? search({ query: kitchenQ, group_ids: [allergenGroup], mode: "retrieve" })
       : Promise.resolve<SearchResult>({ data: [] }),
   ]);
   searches.push({ scope: "guest personal", query: guestQ, rows: guestRes.data.length });
+  if (sharedId && sharedId !== ownId) {
+    searches.push({ scope: "allergies carried between restaurants", query: guestQ, rows: sharedRes.data.length });
+  }
   searches.push({ scope: "restaurant allergen group", query: kitchenQ, rows: kitchenRes.data.length });
 
   // If we could not read a ledger, we do not get to say "allow".
@@ -307,11 +320,16 @@ export async function guardianCheck(args: {
   // ledger, so a guest-side failure is survivable. It says nothing about what
   // is in the food, so a KITCHEN-side failure is not — and the old single flag
   // let a non-empty hint wave both of them through.
+  const fromMemory = [
+    ...extractRestrictions(guestRes.data),
+    ...extractRestrictions(sharedRes.data),
+  ];
   const restricted = args.restrictionsHint?.length
-    ? [...new Set([...args.restrictionsHint, ...extractRestrictions(guestRes.data)])]
-    : extractRestrictions(guestRes.data);
+    ? [...new Set([...args.restrictionsHint, ...fromMemory])]
+    : [...new Set(fromMemory)];
 
-  const guestUnreadable = Boolean(guestRes.failed) && !args.restrictionsHint?.length;
+  const guestUnreadable =
+    (Boolean(guestRes.failed) || Boolean(sharedRes.failed)) && !args.restrictionsHint?.length;
   const kitchenUnreadable = Boolean(kitchenRes.failed);
 
   if (guestUnreadable || kitchenUnreadable) {

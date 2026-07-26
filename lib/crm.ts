@@ -9,7 +9,7 @@
 import { search, searchMany, ingestDetached, type Memory } from "./xtrace";
 import { type Allergen } from "@/data/restaurant";
 import { extractRestrictions } from "./guardian";
-import { getShop, groupsFor, type Shop } from "./shop";
+import { getShop, groupsFor, scopedUserId, safetyScopeId, type Shop } from "./shop";
 
 export interface GuestCard {
   phone: string;
@@ -35,12 +35,24 @@ function pick(rows: Memory[], re: RegExp): string[] {
 }
 
 /** Everything the house knows about this number. */
-export async function guestCard(phone: string): Promise<GuestCard | null> {
-  const rows = await searchMany(
-    "who is this guest: name, language, preferences, dislikes, allergies, how often they order, pickup or delivery",
-    [{ user_id: phone, mode: "retrieve" }]
-  );
-  if (!rows.length) return null;
+export async function guestCard(phone: string, shop: Shop = getShop(null)): Promise<GuestCard | null> {
+  // Two reads, two different jobs. The shop-scoped one is this restaurant's own
+  // guest book. The shared one exists ONLY to pick up an allergy the guest
+  // declared somewhere else — its rows never reach `notes`, `dislikes` or the
+  // usual order, so history stays where it was earned.
+  const own = scopedUserId(shop, phone);
+  const [rows, sharedSafety] = await Promise.all([
+    searchMany(
+      "who is this guest: name, language, preferences, dislikes, allergies, how often they order, pickup or delivery",
+      [{ user_id: own, mode: "retrieve" }]
+    ),
+    own === safetyScopeId(phone)
+      ? Promise.resolve([] as Memory[])
+      : searchMany("allergies, intolerances and foods this guest must never be served",
+          [{ user_id: safetyScopeId(phone), mode: "retrieve" }]),
+  ]);
+  const carriedRestrictions = extractRestrictions(sharedSafety);
+  if (!rows.length && !carriedRestrictions.length) return null;
 
   const all = rows.map((r) => r.text);
   const joined = all.join(" ");
@@ -62,7 +74,7 @@ export async function guestCard(phone: string): Promise<GuestCard | null> {
     name: nameMatch?.[0] ?? null,
     nameZh: zhMatch?.[0] ?? null,
     language: langZh ? "zh" : "en",
-    restrictions: extractRestrictions(rows),
+    restrictions: [...new Set([...extractRestrictions(rows), ...carriedRestrictions])],
     dislikes: dislikes.slice(0, 3),
     spice: spiceRow,
     fulfilment: fulfilRow,
@@ -97,7 +109,7 @@ export async function secretMenuFor(phone: string | null, opts?: { weekday?: boo
         })
       : Promise.resolve({ data: [] as Memory[] }),
     phone
-      ? search({ query: "what flavours does this guest like and dislike?", user_id: phone, mode: "retrieve" })
+      ? search({ query: "what flavours does this guest like and dislike?", user_id: scopedUserId(shop, phone), mode: "retrieve" })
       : Promise.resolve({ data: [] as Memory[] }),
   ]);
 
@@ -151,7 +163,7 @@ export function rememberCall(args: {
   const shop = args.shop ?? getShop(null);
   ingestDetached({
     messages: args.transcript,
-    user_id: args.phone,
+    user_id: scopedUserId(shop, args.phone),
     conv_id: `call_${args.callId}`,
     agent_id: "frontdesk",
     namespace: `rest_${shop.restaurant.id}`,
