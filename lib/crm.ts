@@ -7,7 +7,7 @@
 // phrase to say at the counter.
 
 import { search, searchMany, ingestDetached, KITCHEN_GROUP, ALLERGEN_GROUP, type Memory } from "./xtrace";
-import { MENU, RESTAURANT, bySku, type Allergen } from "@/data/restaurant";
+import { type Allergen } from "@/data/restaurant";
 import { extractRestrictions } from "./guardian";
 import { getShop, groupsFor, type Shop } from "./shop";
 
@@ -136,7 +136,8 @@ export async function secretMenuFor(phone: string | null, opts?: { weekday?: boo
 }
 
 /** 86 awareness — never offer what the kitchen cannot make tonight. */
-export const availableSkus = () => MENU.filter((m) => m.available).map((m) => m.sku);
+export const availableSkus = (shop: Shop = getShop(null)) =>
+  shop.menu.filter((m) => m.available).map((m) => m.sku);
 
 /** Write the call back into memory. Detached: a caller must never wait on it. */
 export function rememberCall(args: {
@@ -144,14 +145,16 @@ export function rememberCall(args: {
   callId: string;
   transcript: { role: string; content: string }[];
   resolved: boolean;
+  shop?: Shop;
 }) {
   if (!args.transcript.length) return;
+  const shop = args.shop ?? getShop(null);
   ingestDetached({
     messages: args.transcript,
     user_id: args.phone,
     conv_id: `call_${args.callId}`,
     agent_id: "frontdesk",
-    namespace: `rest_${RESTAURANT.id}`,
+    namespace: `rest_${shop.restaurant.id}`,
     agentic: true,
     outcome: args.resolved ? "resolved" : "failed",
   });
@@ -164,9 +167,14 @@ export function confirmAllergen(args: {
   present: boolean;
   source: string;
   date: string;
+  shop?: Shop;
 }) {
-  const item = bySku(args.sku);
+  const shop = args.shop ?? getShop(null);
+  const item = shop.menu.find((m) => m.sku === args.sku);
   if (!item) return;
+  // Writes go to THIS shop's allergen group. A confirmation about a boba drink
+  // must never land in the Sichuan restaurant's ledger.
+  const group = groupsFor(shop).allergen || ALLERGEN_GROUP;
   const verb = args.present ? "contains" : "does not contain";
   ingestDetached({
     messages: [
@@ -174,14 +182,14 @@ export function confirmAllergen(args: {
         role: "user",
         content:
           `Confirmation recorded on ${args.date} by ${args.source}: ` +
-          `${RESTAURANT.name} sku ${args.sku} (${item.name_en} / ${item.name_zh}) ` +
+          `${shop.restaurant.name} sku ${args.sku} (${item.name_en} / ${item.name_zh}) ` +
           `${verb} ${args.allergen.replace(/_/g, " ")}.`,
       },
       { role: "assistant", content: `Noted for ${item.name_en}.` },
     ],
-    user_id: RESTAURANT.opsUserId,
-    conv_id: `confirm_${args.sku}_${args.allergen}_${args.date}`,
-    group_ids: ALLERGEN_GROUP ? [ALLERGEN_GROUP] : undefined,
-    namespace: `rest_${RESTAURANT.id}`,
+    user_id: shop.restaurant.opsUserId,
+    conv_id: `confirm_${shop.slug}_${args.sku}_${args.allergen}_${args.date}`,
+    group_ids: group ? [group] : undefined,
+    namespace: `rest_${shop.restaurant.id}`,
   });
 }

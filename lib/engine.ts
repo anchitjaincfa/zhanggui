@@ -8,7 +8,7 @@
 import { guardianCheck, type GuardianVerdict } from "./guardian";
 import { guestCard, secretMenuFor, rememberCall, confirmAllergen, type GuestCard } from "./crm";
 import { emit, emitMany, updateCall } from "./store";
-import { bySku, MENU, RESTAURANT } from "@/data/restaurant";
+
 import type { Action } from "./scenarios";
 import { getShop, type Shop } from "./shop";
 
@@ -146,11 +146,12 @@ export async function doFinalize(ctx: RunContext, pickupMinutes: number) {
 }
 
 export async function doConfirm(ctx: RunContext, sku: string, allergen: string, present: boolean) {
+  const shop = ctx.shop ?? getShop(null);
   const date = new Date().toISOString().slice(0, 10);
-  confirmAllergen({ sku, allergen, present, source: "guest asked at the counter", date });
+  confirmAllergen({ sku, allergen, present, source: "guest asked at the counter", date, shop });
   await emit(ctx.callId, "memory", "confirmation written", {
     source: "guest asked at counter", scope: "allergen", type: "fact",
-    text: `${date}: ${bySku(sku)?.name_en} ${present ? "contains" : "does not contain"} ${allergen.replace(/_/g, " ")}.`,
+    text: `${date}: ${shop.menu.find((m) => m.sku === sku)?.name_en} ${present ? "contains" : "does not contain"} ${allergen.replace(/_/g, " ")}.`,
   });
 }
 
@@ -168,12 +169,12 @@ export async function runAction(ctx: RunContext, a: Action) {
 /** Close the loop: the call itself becomes memory for next time. */
 export function closeCall(ctx: RunContext, transcript: { role: string; content: string }[], resolved: boolean) {
   if (!ctx.phone) return;
-  rememberCall({ phone: ctx.phone, callId: ctx.callId, transcript, resolved });
+  rememberCall({ phone: ctx.phone, callId: ctx.callId, transcript, resolved, shop: ctx.shop ?? getShop(null) });
 }
 
-export const menuForPrompt = () =>
-  MENU.filter((m) => m.available && m.english_listed)
+export const menuForPrompt = (shop: Shop = getShop(null)) =>
+  shop.menu.filter((m) => m.available && m.english_listed)
     .map((m) => `${m.sku} | ${m.name_en} (${m.name_zh}) ${money(m.price_cents)}`)
     .join("\n");
 
-export const restaurantName = RESTAURANT.name;
+export const restaurantName = (shop: Shop = getShop(null)) => shop.restaurant.name;

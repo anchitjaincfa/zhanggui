@@ -15,7 +15,7 @@
 
 import { search, ALLERGEN_GROUP, type SearchResult } from "./xtrace";
 import { getShop, groupsFor, type Shop } from "./shop";
-import { bySku, MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
+import { MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
 
 export const ALLERGENS: Allergen[] = [
   "peanut", "shellfish", "shrimp", "fish_sauce", "shrimp_paste",
@@ -142,6 +142,10 @@ export interface Hazard {
  * hold it anyway. Citing a ledger row is also a better answer to "how do you
  * know?" than citing a sentence a language model rewrote.
  */
+// The `rowsIn`/`menu` defaults below resolve to Golden Dragon deliberately —
+// it is DEFAULT_SHOP, the same thing getShop(null) returns. guardianCheck always
+// passes the caller's shop explicitly, so the defaults only apply to a direct
+// call that never named a restaurant.
 function ledger(sku: string, allergen: Allergen, present: boolean, rowsIn = CONFIRMATIONS) {
   const rows = rowsIn.filter(
     (c) => c.sku === sku && c.allergen === allergen && c.present === present
