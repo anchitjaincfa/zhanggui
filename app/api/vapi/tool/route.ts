@@ -11,8 +11,7 @@
 import { NextResponse } from "next/server";
 import { createCall, findCallByVapiId, updateCall } from "@/lib/store";
 import { doGuardian, doIdentify, doSecretMenu, doAdd, doFinalize, type RunContext } from "@/lib/engine";
-import { RESTAURANT } from "@/data/restaurant";
-import { shopFromRequest } from "@/lib/shop";
+import { tryShop, DEFAULT_SHOP } from "@/lib/shop";
 import { resolveItem, didYouMean } from "@/lib/resolve";
 import {
   identifyByPhone, identifyByBirthday, linkPhoneToProfile, describe, greeting, sayBirthday,
@@ -48,7 +47,14 @@ export async function POST(req: Request) {
     // Which restaurant this number answers for. Vapi's tool URL carries it as
     // a query string (…/api/vapi/tool?shop=purple_kow), so one deployment can
     // serve two shops without either one knowing about the other.
-    const shop = shopFromRequest(req);
+    const shop = tryShop(new URL(req.url).searchParams.get("shop"));
+    if (!shop) {
+      return say(
+        "This number is not configured for a known restaurant. Tell the caller " +
+        "someone will pick up, and stop.",
+        { configError: true }
+      );
+    }
     const MENU = shop.menu;
 
     const action = String(args.action ?? "").toLowerCase().trim();
@@ -72,11 +78,16 @@ export async function POST(req: Request) {
     // of a single call, but never shared between two different phones.
     const asId = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     const call = (inner.call ?? body.call) as Record<string, unknown> | undefined;
-    const vapiCallId =
+    const rawCallId =
       asId(inner.callId) ??
       asId(call?.id) ??
       asId(args.callId) ??
       (digits ? `web_${digits}` : "web");
+    // Scope the row to the shop. Golden Dragon keeps its bare ids so existing
+    // rows still resolve; anything else is prefixed, so the same callId
+    // arriving for two restaurants cannot end up on one ticket.
+    const vapiCallId =
+      shop.slug === DEFAULT_SHOP ? rawCallId : `${shop.slug}:${rawCallId}`;
     const existing = await findCallByVapiId(vapiCallId);
     const callId = existing?.id ?? (await createCall({ vapiCallId, phone, channel: "phone" }));
     const ctx: RunContext = { callId, phone: phone ?? existing?.caller_phone ?? null, shop };
@@ -154,6 +165,18 @@ export async function POST(req: Request) {
       // than guessing, because guessing hands a stranger someone's allergies.
       case "birthday":
       case "dob": {
+        // The birthday registry is Golden Dragon's. Without this fence, asking
+        // the boba shop for "4 March 1988" handed back a Sichuan regular's
+        // name, allergies, usual order and notes — and then linked the
+        // caller's number to her profile. Fencing `identify` was not enough;
+        // this is the same door with a different handle.
+        if (!ownRegistry) {
+          return say(
+            "We don't look guests up by date of birth here. Take the order " +
+            "normally and ask about allergies out loud.",
+            { matched: false }
+          );
+        }
         const spoken = query || String(args.birthday ?? args.dob ?? args.date ?? "");
         // The dashboard tool schema only carries action/sku/phone/query, so a
         // name arrives inside `query` alongside the date ("10 Jan 1994, Anchit")
@@ -358,11 +381,20 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const shop = tryShop(new URL(req.url).searchParams.get("shop"));
+  if (!shop) {
+    return NextResponse.json(
+      { error: "Unknown shop", shops: ["golden_dragon", "purple_kow"] },
+      { status: 400 }
+    );
+  }
+  const sample = shop.menu.find((m) => m.available) ?? shop.menu[0];
   return NextResponse.json({
     service: "zhanggui single-tool router",
-    restaurant: RESTAURANT.name,
-    actions: ["identify", "specials", "menu", "add", "finalize", "escalate"],
-    body: { action: "add", sku: "kung_pao_chicken", phone: "+14155550142", qty: 1 },
+    shop: shop.slug,
+    restaurant: shop.restaurant.name,
+    actions: ["identify", "birthday", "specials", "menu", "add", "finalize", "escalate"],
+    body: { action: "add", sku: sample?.sku, phone: shop.guests[0]?.phone, qty: 1 },
   });
 }

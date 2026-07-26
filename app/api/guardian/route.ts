@@ -14,7 +14,7 @@
 
 import { NextResponse } from "next/server";
 import { guardianCheck } from "@/lib/guardian";
-import { shopFromRequest } from "@/lib/shop";
+import { tryShop } from "@/lib/shop";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -24,7 +24,13 @@ export async function GET(req: Request) {
   const phone = url.searchParams.get("phone");
   const sku = url.searchParams.get("sku");
   const all = url.searchParams.get("all");
-  const shop = shopFromRequest(req);
+  const shop = tryShop(url.searchParams.get("shop"));
+  if (!shop) {
+    return NextResponse.json(
+      { error: `Unknown shop "${url.searchParams.get("shop")}"`, shops: ["golden_dragon", "purple_kow"] },
+      { status: 400 }
+    );
+  }
   const menu = shop.menu;
 
   try {

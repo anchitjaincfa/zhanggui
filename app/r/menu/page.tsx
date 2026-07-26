@@ -17,7 +17,7 @@ import { useSearchParams } from "next/navigation";
 import Shell, { useT } from "../Shell";
 import "../theme.css";
 import { type MenuItem } from "@/data/restaurant";
-import { getShop } from "@/lib/shop";
+import { tryShop, getShop } from "@/lib/shop";
 import { allergen, station, type Lang } from "@/lib/i18n";
 
 export default function Page() {
@@ -71,7 +71,7 @@ function Body() {
   // ?shop=purple_kow swaps the whole page to the boba shop. No parameter means
   // Golden Dragon, exactly as before.
   const params = useSearchParams();
-  const shop = getShop(params.get("shop"));
+  const shop = tryShop(params.get("shop")) ?? getShop(null);
   const dishes = useMemo<MenuItem[]>(
     () => (Array.isArray(shop.menu) ? shop.menu : []),
     [shop]

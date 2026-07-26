@@ -6,7 +6,7 @@
 // guest actually likes. The bridge is the product: dish, reason, and the exact
 // phrase to say at the counter.
 
-import { search, searchMany, ingestDetached, KITCHEN_GROUP, ALLERGEN_GROUP, type Memory } from "./xtrace";
+import { search, searchMany, ingestDetached, type Memory } from "./xtrace";
 import { type Allergen } from "@/data/restaurant";
 import { extractRestrictions } from "./guardian";
 import { getShop, groupsFor, type Shop } from "./shop";
@@ -85,7 +85,7 @@ export interface SecretPick {
 /** What a twenty-year regular would order here, for this particular guest. */
 export async function secretMenuFor(phone: string | null, opts?: { weekday?: boolean; shop?: Shop }): Promise<SecretPick[]> {
   const shop = opts?.shop ?? getShop(null);
-  const kitchenGroup = groupsFor(shop).kitchen || KITCHEN_GROUP;
+  const kitchenGroup = groupsFor(shop).kitchen;
   const weekday = opts?.weekday ?? ![0, 6].includes(new Date().getDay());
 
   const [kitchen, guest] = await Promise.all([
@@ -174,7 +174,7 @@ export function confirmAllergen(args: {
   if (!item) return;
   // Writes go to THIS shop's allergen group. A confirmation about a boba drink
   // must never land in the Sichuan restaurant's ledger.
-  const group = groupsFor(shop).allergen || ALLERGEN_GROUP;
+  const group = groupsFor(shop).allergen;
   const verb = args.present ? "contains" : "does not contain";
   ingestDetached({
     messages: [

@@ -62,21 +62,42 @@ export const SHOPS: Record<string, Shop> = {
 
 export const DEFAULT_SHOP = "golden_dragon";
 
-/** Resolve a shop. Anything unrecognised falls back to Golden Dragon, so a
- *  typo in a URL degrades to the known-good demo rather than an error page. */
+/** Resolve a shop. NO parameter means Golden Dragon; an unrecognised one is an
+ *  error, not a fallback.
+ *
+ *  This used to degrade a typo to the known-good demo, which sounded friendly
+ *  and was actually a data-exposure bug: `?shop=purple_ko` quietly answered
+ *  with the Sichuan restaurant's menu, guest phone list and identity to someone
+ *  who had plainly asked for the other business. Absent means default; wrong
+ *  means wrong. */
 export function getShop(slug?: string | null): Shop {
-  if (!slug) return GOLDEN;
-  return SHOPS[slug.toLowerCase().trim()] ?? GOLDEN;
+  if (slug === undefined || slug === null || slug.trim() === "") return GOLDEN;
+  const hit = SHOPS[slug.toLowerCase().trim()];
+  if (!hit) throw new UnknownShopError(slug);
+  return hit;
 }
 
-export function shopFromRequest(req: Request): Shop {
-  try {
-    return getShop(new URL(req.url).searchParams.get("shop"));
-  } catch {
-    return GOLDEN;
+export class UnknownShopError extends Error {
+  constructor(public readonly slug: string) {
+    super(`Unknown shop "${slug}". Known: ${Object.keys(SHOPS).join(", ")}`);
+    this.name = "UnknownShopError";
   }
 }
 
+/** Never throws — used where a bad URL should not 500. */
+export function tryShop(slug?: string | null): Shop | null {
+  try { return getShop(slug); } catch { return null; }
+}
+
+export function shopFromRequest(req: Request): Shop {
+  return getShop(new URL(req.url).searchParams.get("shop"));
+}
+
+/** This shop's memory groups, and only this shop's. Callers must NOT fall back
+ *  to the Golden Dragon constants when these are empty: an unconfigured Purple
+ *  Kow would then read — and write — the Sichuan restaurant's allergen ledger,
+ *  which is the exact failure the registry exists to prevent. Empty means
+ *  "no group", and the gate treats that as knowing nothing. */
 export const groupsFor = (shop: Shop) => ({
   kitchen: process.env[shop.kitchenGroupEnv] || "",
   allergen: process.env[shop.allergenGroupEnv] || "",

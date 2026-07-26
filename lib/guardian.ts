@@ -13,7 +13,7 @@
 //   H2 — a "does NOT contain" confirmation read as a hazard. Negations are
 //        parsed explicitly and treated as exculpatory, not incriminating.
 
-import { search, ALLERGEN_GROUP, type SearchResult } from "./xtrace";
+import { search, type SearchResult } from "./xtrace";
 import { getShop, groupsFor, type Shop } from "./shop";
 import { MENU, CONFIRMATIONS, type Allergen, type MenuItem, type Station } from "@/data/restaurant";
 
@@ -282,7 +282,7 @@ export async function guardianCheck(args: {
   const shop = typeof args.shop === "string" || args.shop == null
     ? getShop(args.shop ?? null) : args.shop;
   const menu = shop.menu;
-  const allergenGroup = groupsFor(shop).allergen || ALLERGEN_GROUP;
+  const allergenGroup = groupsFor(shop).allergen;
   const item = menu.find((m) => m.sku === args.sku) ?? menu[0];
   const searches: GuardianVerdict["searches"] = [];
 
